@@ -1,55 +1,86 @@
 from rest_framework import permissions
 
 
-class IsAdminOrSuperAdmin(permissions.BasePermission):
+class IsInstitutionAdminOrStaff(permissions.BasePermission):
     """
-    Allows access only to users with admin or superadmin role.
+    Allows access only to authenticated institution staff or superusers.
+    Recommended for full CRUD access on students.
     """
+
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role in ['admin', 'superadmin']
+        return (
+            request.user and
+            request.user.is_authenticated and
+            (request.user.is_staff or request.user.is_superuser)
+        )
 
 
-class IsAssignedClassTeacher(permissions.BasePermission):
+class IsReadOnlyOrInstitutionStaff(permissions.BasePermission):
     """
-    Allows access only if the teacher is assigned to the student's class.
+    Read-only for unauthenticated or non-staff users.
+    Write access restricted to institution staff or superusers.
     """
-    def has_object_permission(self, request, view, obj):
-        user = request.user
-        return user.is_authenticated and user.role == 'teacher' and obj.assigned_class_teacher == user
 
-
-class IsParentOfStudent(permissions.BasePermission):
-    """
-    Allows access if the user is the parent linked to the student.
-    """
-    def has_object_permission(self, request, view, obj):
-        user = request.user
-        return user.is_authenticated and user.role == 'parent' and obj.parents.filter(id=user.id).exists()
-
-
-class CanManageStudents(permissions.BasePermission):
-    """
-    Custom permission for any user who can manage student data.
-    Admins and SuperAdmins can manage.
-    """
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role in ['admin', 'superadmin']
-
-
-class CanViewStudentProfile(permissions.BasePermission):
-    """
-    Parents can view their own children's data,
-    Teachers can view students in their stream/class,
-    Admins can view all.
-    """
-    def has_object_permission(self, request, view, obj):
-        user = request.user
-        if not user.is_authenticated:
-            return False
-        if user.role in ['admin', 'superadmin']:
+        if request.method in permissions.SAFE_METHODS:
             return True
-        if user.role == 'teacher':
-            return obj.stream and obj.stream.teachers.filter(id=user.id).exists()
-        if user.role == 'parent':
-            return obj.parents.filter(id=user.id).exists()
-        return False
+        return (
+            request.user and
+            request.user.is_authenticated and
+            (request.user.is_staff or request.user.is_superuser)
+        )
+
+
+class IsStudentInstitutionMatch(permissions.BasePermission):
+    """
+    Ensures a user can only operate on student records from their own institution.
+    Object-level check.
+    """
+
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_superuser:
+            return True
+        user_institution = getattr(request.user, 'institution', None)
+        student_institution = getattr(obj, 'institution', None)
+        return (
+            request.user.is_authenticated and
+            user_institution and student_institution and
+            user_institution == student_institution
+        )
+
+
+class IsGuardianOfStudent(permissions.BasePermission):
+    """
+    Allows access to guardians only if they are linked to the student.
+    Intended for limited read-access (e.g. medical records, performance).
+    """
+
+    def has_object_permission(self, request, view, obj):
+        if not request.user.is_authenticated:
+            return False
+
+        guardian_profile = getattr(request.user, 'guardian_profile', None)
+        if not guardian_profile:
+            return False
+
+        return obj.linked_guardians.filter(guardian=guardian_profile).exists()
+
+
+class IsTeacherOfStudent(permissions.BasePermission):
+    """
+    Grants access to a teacher if the student is in their class/stream.
+    Useful for class teachers accessing assigned students.
+    """
+
+    def has_object_permission(self, request, view, obj):
+        if not request.user.is_authenticated:
+            return False
+
+        teacher_profile = getattr(request.user, 'teacher_profile', None)
+        if not teacher_profile:
+            return False
+
+        return (
+            obj.assigned_class_teacher == teacher_profile or
+            obj.stream in teacher_profile.streams.all()
+        )

@@ -1,40 +1,49 @@
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
+from django.utils import timezone
 from .models import (
     SyllabusTopic, SyllabusSubtopic, LearningOutcome,
     SyllabusProgress, SyllabusAuditLog
 )
-from django.utils import timezone
 
 
 @receiver(post_save, sender=SyllabusTopic)
 def log_topic_created(sender, instance, created, **kwargs):
     if created:
         SyllabusAuditLog.objects.create(
-            user=None,  # Filled later via admin or view context
+            user=getattr(instance, 'created_by', None),
             action='Created Topic',
             curriculum_subject=instance.curriculum_subject,
             topic=instance,
-            notes=f"Topic '{instance.title}' created."
+            notes=f"Topic '{instance.title}' was created."
         )
 
 
 @receiver(post_save, sender=SyllabusProgress)
 def log_progress_update(sender, instance, created, **kwargs):
-    action = 'Marked as Covered' if instance.status == 'covered' else 'Progress Updated'
+    # Prevent duplicate logs on initial creation unless it’s meaningful
+    if created and instance.status == 'pending':
+        return
+
+    action = {
+        'covered': 'Marked as Covered',
+        'skipped': 'Marked as Skipped',
+        'pending': 'Progress Updated'
+    }.get(instance.status, 'Progress Updated')
+
     SyllabusAuditLog.objects.create(
         user=instance.teacher,
         action=action,
         curriculum_subject=instance.topic.curriculum_subject,
         topic=instance.topic,
-        notes=f"Status: {instance.status}, Date: {instance.coverage_date}"
+        notes=f"Status set to '{instance.status}' on {timezone.now().date()}."
     )
 
 
 @receiver(post_delete, sender=SyllabusTopic)
 def log_topic_deleted(sender, instance, **kwargs):
     SyllabusAuditLog.objects.create(
-        user=None,
+        user=getattr(instance, 'created_by', None),
         action='Deleted Topic',
         curriculum_subject=instance.curriculum_subject,
         topic=None,

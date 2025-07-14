@@ -1,18 +1,29 @@
-from rest_framework.routers import DefaultRouter
 from django.urls import path, include
-from lessons.views import (
-    LessonPlanViewSet, LessonSessionViewSet,
-    LessonScheduleViewSet, LessonAttachmentViewSet,
-    LessonAnalyticsViewSet
+from rest_framework.routers import DefaultRouter
+from .views import (
+    LessonPlanViewSet, LessonScheduleViewSet, LessonSessionViewSet,
+    LessonAttachmentViewSet, LessonScaffoldSuggestionViewSet,
+    LessonAISuggestionAPIView, LessonCoverageAlertAPIView,
+    LessonAnalyticsSummaryAPIView, TeacherLessonAnalyticsAPIView,
+    InstitutionLessonAnalyticsAPIView
 )
 
 router = DefaultRouter()
-router.register(r'lesson-plans', LessonPlanViewSet)
-router.register(r'lesson-sessions', LessonSessionViewSet)
-router.register(r'lesson-schedules', LessonScheduleViewSet)
-router.register(r'lesson-attachments', LessonAttachmentViewSet)
+router.register(r'plans', LessonPlanViewSet)
+router.register(r'schedules', LessonScheduleViewSet)
+router.register(r'sessions', LessonSessionViewSet)
+router.register(r'attachments', LessonAttachmentViewSet)
+router.register(r'scaffold-suggestions', LessonScaffoldSuggestionViewSet)
 
 urlpatterns = [
-    path('', include(router.urls)),
-    path('analytics/', LessonAnalyticsViewSet.as_view({'get': 'list'}), name='lesson-analytics'),
+    path('api/', include(router.urls)),
+
+    # AI Views
+    path('api/ai/plan/<int:lesson_plan_id>/suggestions/', LessonAISuggestionAPIView.as_view()),
+    path('api/ai/coverage-alerts/', LessonCoverageAlertAPIView.as_view()),
+
+    # Analytics Views
+    path('api/analytics/summary/', LessonAnalyticsSummaryAPIView.as_view()),
+    path('api/analytics/teacher/<int:teacher_id>/', TeacherLessonAnalyticsAPIView.as_view()),
+    path('api/analytics/institution/<int:institution_id>/', InstitutionLessonAnalyticsAPIView.as_view()),
 ]

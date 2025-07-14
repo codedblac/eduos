@@ -1,63 +1,77 @@
-# admissions/ai.py
-
 import random
 from datetime import timedelta
 from django.utils import timezone
-from .models import Applicant, EntranceExam, AdmissionOffer, AdmissionSession
 from django.core.files.base import ContentFile
 from django.template.loader import render_to_string
-import io
 from weasyprint import HTML
+from .models import Applicant, EntranceExam, AdmissionOffer, AdmissionSession
 
 
 def suggest_admission_offer(applicant):
     """
-    Basic rule-based logic to suggest whether to offer admission to an applicant.
-    Can be replaced/enhanced by ML model in future.
+    Rule-based admission decision helper.
+    - Requires applicant to pass entrance exam with >= 50%.
+    - Can be swapped with ML logic.
     """
-    if hasattr(applicant, 'entranceexam'):
-        exam = applicant.entranceexam
-        if exam.passed and exam.score and exam.score >= 50:
-            return True
+    exam = EntranceExam.objects.filter(applicant=applicant).first()
+    if exam and exam.passed and exam.score and exam.score >= 50:
+        return True
     return False
 
 
 def predict_success_probability(applicant):
     """
-    AI-powered future performance prediction stub.
-    You can later train this using historical student data.
+    Estimate applicant's future performance likelihood.
+    Can be improved by ML based on academic records & demographics.
     """
-    base = 0.5  # baseline chance
-    score = getattr(applicant.entranceexam, 'score', None)
+    base_score = 0.5  # baseline
 
-    if score is not None:
-        base += (float(score) - 50) / 100  # adjust by score offset
+    # Adjust based on entrance score
+    exam = EntranceExam.objects.filter(applicant=applicant).first()
+    if exam and exam.score is not None:
+        base_score += (float(exam.score) - 50) / 100
 
-    if applicant.has_disability or applicant.has_chronic_illness:
-        base -= 0.1  # minor deduction for potential support needs
+    # Penalize support-needing applicants slightly
+    if applicant.has_disability:
+        base_score -= 0.05
+    if applicant.has_chronic_illness:
+        base_score -= 0.05
 
-    # Add talent as a positive boost
+    # Boost for talents or leadership interest
     if applicant.talents:
-        base += 0.05
+        base_score += 0.05
 
-    return round(min(max(base, 0), 1), 2)  # clamp between 0 and 1
+    return round(min(max(base_score, 0), 1), 2)  # Clamp between 0-1
+
+
+def rank_applicants_by_potential(applicants):
+    """
+    Rank applicants using predictive scoring logic.
+    """
+    return sorted(applicants, key=lambda a: predict_success_probability(a), reverse=True)
 
 
 def recommend_class_allocation(applicant, available_classes):
     """
-    Recommends the best class for applicant based on even distribution logic.
+    Recommend least-loaded class for applicant.
+    Requires .student_set on each class (prefetch recommended).
     """
-    # Count current students per class
-    class_distribution = {cls.id: cls.student_set.count() for cls in available_classes}
-    recommended_class = min(class_distribution, key=class_distribution.get)
-    return next(cls for cls in available_classes if cls.id == recommended_class)
+    class_distribution = {
+        cls.id: cls.student_set.count() for cls in available_classes
+    }
+    min_loaded_id = min(class_distribution, key=class_distribution.get)
+    return next(cls for cls in available_classes if cls.id == min_loaded_id)
 
 
 def recommend_hostel_allocation(applicant, available_hostels):
     """
-    Recommends hostel based on gender and space availability.
+    Recommend hostel by gender and space.
+    Hostel must have `.occupants.count()` and `.gender` field.
     """
-    matching_hostels = [h for h in available_hostels if h.gender in [applicant.gender, 'any'] and h.capacity > h.occupants.count()]
+    matching_hostels = [
+        hostel for hostel in available_hostels
+        if hostel.gender in [applicant.gender, 'any'] and hostel.occupants.count() < hostel.capacity
+    ]
     if not matching_hostels:
         return None
     return sorted(matching_hostels, key=lambda h: h.occupants.count())[0]
@@ -65,48 +79,47 @@ def recommend_hostel_allocation(applicant, available_hostels):
 
 def generate_offer_letter(applicant):
     """
-    Auto-generate offer letter PDF using HTML template.
+    Auto-generate PDF admission letter using WeasyPrint and template.
     """
     context = {
         "applicant": applicant,
-        "date": timezone.now().date(),
         "institution": applicant.admission_session.institution,
+        "date": timezone.now().date(),
         "expiry_date": timezone.now().date() + timedelta(days=14),
     }
+
     html_string = render_to_string("admissions/offer_letter_template.html", context)
     pdf_file = HTML(string=html_string).write_pdf()
-
     return ContentFile(pdf_file, name=f"Offer_Letter_{applicant.id}.pdf")
 
 
 def highlight_special_applicants():
     """
-    Returns applicants that may need special attention:
-    - Very high entrance score
-    - Talent flagged
-    - Orphaned or chronic illness
+    Return queryset of applicants flagged for:
+    - High score
+    - Orphaned
+    - Chronic illness
+    - Talented
     """
-    special_cases = Applicant.objects.filter(
+    return Applicant.objects.filter(
         entranceexam__score__gte=85
-    ) | Applicant.objects.filter(
-        talents__isnull=False
-    ) | Applicant.objects.filter(
-        orphan_status__in=['partial', 'full']
-    ) | Applicant.objects.filter(
-        has_chronic_illness=True
-    )
-    return special_cases.distinct()
+    ).union(
+        Applicant.objects.filter(orphan_status__in=['partial', 'full']),
+        Applicant.objects.filter(has_chronic_illness=True),
+        Applicant.objects.exclude(talents__isnull=True).exclude(talents__exact='')
+    ).distinct()
 
 
 def generate_admission_summary_for_review():
     """
-    Generates a short summary of applicant stats for admin/board meeting.
+    Return high-level applicant stats for review dashboards or PDFs.
     """
     total = Applicant.objects.count()
     shortlisted = Applicant.objects.filter(application_status='shortlisted').count()
     accepted = Applicant.objects.filter(application_status='accepted').count()
     enrolled = Applicant.objects.filter(application_status='enrolled').count()
     chronic = Applicant.objects.filter(has_chronic_illness=True).count()
+    orphaned = Applicant.objects.filter(orphan_status__in=['partial', 'full']).count()
     special = highlight_special_applicants().count()
 
     return {
@@ -116,4 +129,5 @@ def generate_admission_summary_for_review():
         "enrolled": enrolled,
         "special_cases": special,
         "with_chronic_illness": chronic,
+        "orphans": orphaned,
     }

@@ -1,19 +1,54 @@
 from rest_framework import permissions
 
-class IsSuperAdminOrInstitutionAdmin(permissions.BasePermission):
+
+class IsInstitutionAdminOrReadOnly(permissions.BasePermission):
     """
-    Permission to allow only superadmins or institution admins to manage teachers.
+    Allow full access to institution admins, read-only to others.
     """
 
     def has_permission(self, request, view):
-        user = request.user
-        return user.is_authenticated and (
-            user.is_superuser or user.role == 'admin'
-        )
+        if request.method in permissions.SAFE_METHODS:
+            return request.user.is_authenticated
+        return request.user.is_authenticated and getattr(request.user, 'is_institution_admin', False)
 
     def has_object_permission(self, request, view, obj):
-        # Superadmin can do anything
-        if request.user.is_superuser:
+        if request.method in permissions.SAFE_METHODS:
+            return obj.institution == getattr(request.user, 'institution', None)
+        return (
+            request.user.is_authenticated and
+            getattr(request.user, 'is_institution_admin', False) and
+            obj.institution == getattr(request.user, 'institution', None)
+        )
+
+
+class IsTeacherOrInstitutionAdmin(permissions.BasePermission):
+    """
+    Allow access if the user is the teacher themselves or the institution admin.
+    """
+
+    def has_object_permission(self, request, view, obj):
+        if not request.user.is_authenticated:
+            return False
+
+        if hasattr(request.user, 'teacher_profile') and obj == request.user.teacher_profile:
             return True
-        # Admins can manage teachers in their own institution
-        return obj.institution == request.user.institution
+
+        if getattr(request.user, 'is_institution_admin', False) and obj.institution == request.user.institution:
+            return True
+
+        return False
+
+
+class IsTeacherUserOrReadOnly(permissions.BasePermission):
+    """
+    Authenticated teachers can access their own profile. Admins can modify others.
+    """
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS:
+            return request.user.is_authenticated
+
+        if hasattr(request.user, 'teacher_profile') and obj == request.user.teacher_profile:
+            return True
+
+        return getattr(request.user, 'is_institution_admin', False)

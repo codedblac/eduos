@@ -1,144 +1,86 @@
 from rest_framework import permissions
+from accounts.models import CustomUser
 
 
-# ==============================
-# Generic Role-Based Permission
-# ==============================
-class HasRole(permissions.BasePermission):
-    """
-    Allows access only to users with specific roles.
-    Usage: permission_classes = [HasRole(User.Role.TEACHER, User.Role.PARENT)]
-    """
-    def __init__(self, *roles):
-        self.roles = roles
-
-    def has_permission(self, request, view):
-        return (
-            request.user
-            and request.user.is_authenticated
-            and request.user.role in self.roles
-        )
-
-
-# ==============================
-# Super Admin
-# ==============================
 class IsSuperAdmin(permissions.BasePermission):
     """
-    Allows access only to Super Admin users.
+    ✅ Allows access only to super admins.
+    """
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and request.user.role == CustomUser.Role.SUPER_ADMIN
+
+
+class IsInstitutionAdmin(permissions.BasePermission):
+    """
+    ✅ Allows access only to institution (school) admins.
+    """
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and request.user.role == CustomUser.Role.ADMIN
+
+
+class IsInstitutionStaff(permissions.BasePermission):
+    """
+    ✅ Allows access only to institutional users (staff, teacher, etc.).
+    Excludes public and government roles.
     """
     def has_permission(self, request, view):
         return (
-            request.user
-            and request.user.is_authenticated
-            and request.user.is_super_admin
+            request.user.is_authenticated and
+            request.user.institution is not None and
+            request.user.role not in [
+                CustomUser.Role.SUPER_ADMIN,
+                CustomUser.Role.PUBLIC_LEARNER,
+                CustomUser.Role.PUBLIC_TEACHER,
+                CustomUser.Role.GOV_USER
+            ]
         )
 
 
-# ==============================
-# School Admin
-# ==============================
-class IsSchoolAdmin(permissions.BasePermission):
+class IsPublicUser(permissions.BasePermission):
     """
-    Allows access only to School Admin users.
+    ✅ Allows access only to public platform users (not school-linked).
     """
     def has_permission(self, request, view):
         return (
-            request.user
-            and request.user.is_authenticated
-            and request.user.is_school_admin
+            request.user.is_authenticated and
+            request.user.role in [
+                CustomUser.Role.PUBLIC_LEARNER,
+                CustomUser.Role.PUBLIC_TEACHER
+            ]
         )
 
 
-# ==============================
-# Institution Check
-# ==============================
+class IsGovernmentUser(permissions.BasePermission):
+    """
+    ✅ Allows access only to government users for national dashboards.
+    """
+    def has_permission(self, request, view):
+        return (
+            request.user.is_authenticated and
+            request.user.role == CustomUser.Role.GOV_USER
+        )
+
+
+class IsSameInstitutionOrSuperAdmin(permissions.BasePermission):
+    """
+    ✅ Object-level access: allowed if user is from same institution or is SUPER_ADMIN.
+    """
+    def has_object_permission(self, request, view, obj):
+        user = request.user
+        if user.role == CustomUser.Role.SUPER_ADMIN:
+            return True
+        return hasattr(obj, 'institution') and obj.institution == user.institution
+
+
 class IsSameInstitution(permissions.BasePermission):
     """
-    Allows access only if the user's institution matches the object's institution.
-    Assumes the object or its related user has an 'institution' attribute.
+    ✅ Object-level access: only if user is from the same institution.
+    SUPER_ADMIN is NOT allowed.
     """
     def has_object_permission(self, request, view, obj):
-        if request.user.is_super_admin:
-            return True
-
-        user_institution = getattr(request.user, 'institution', None)
-        obj_institution = getattr(obj, 'institution', None)
-
-        # Check nested relationship if direct institution not found
-        if obj_institution is None and hasattr(obj, 'user'):
-            obj_institution = getattr(getattr(obj, 'user', None), 'institution', None)
-
-        return user_institution and obj_institution and user_institution == obj_institution
-
-
-# ==============================
-# Ownership / Self Access
-# ==============================
-class IsSelfOrReadOnly(permissions.BasePermission):
-    """
-    Allows users to edit their own information; read-only access otherwise.
-    """
-    def has_object_permission(self, request, view, obj):
-        if request.method in permissions.SAFE_METHODS:
-            return True
-        return obj == request.user
-
-
-# ==============================
-# Active Authenticated Users Only
-# ==============================
-class IsAuthenticatedAndActive(permissions.BasePermission):
-    """
-    Allows access only to authenticated and active users.
-    """
-    def has_permission(self, request, view):
+        user = request.user
         return (
-            request.user
-            and request.user.is_authenticated
-            and request.user.is_active
-        )
-
-
-# ==============================
-# User Management Permissions
-# ==============================
-class CanManageUsers(permissions.BasePermission):
-    """
-    Allows School Admins and Super Admins to manage users.
-    """
-    def has_permission(self, request, view):
-        if not request.user or not request.user.is_authenticated:
-            return False
-        if request.user.is_super_admin:
-            return True
-        if request.user.is_school_admin:
-            return True
-        return False
-
-    def has_object_permission(self, request, view, obj):
-        if request.user.is_super_admin:
-            return True
-        return (
-            request.user.is_school_admin and
+            user.is_authenticated and
             hasattr(obj, 'institution') and
-            obj.institution == request.user.institution
-        )
-
-
-# ==============================
-# Super Admin or Read Only
-# ==============================
-class IsSuperAdminOrReadOnly(permissions.BasePermission):
-    """
-    Allows read-only access for all authenticated users,
-    but write access only to Super Admins.
-    """
-    def has_permission(self, request, view):
-        if request.method in permissions.SAFE_METHODS:
-            return request.user and request.user.is_authenticated
-        return (
-            request.user
-            and request.user.is_authenticated
-            and request.user.is_super_admin
+            obj.institution == user.institution
         )

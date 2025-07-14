@@ -1,82 +1,56 @@
 from django.contrib import admin
-from import_export.admin import ExportMixin
-from import_export import resources
 from .models import Institution, SchoolAccount
 
-# ============================
-# Import/Export Resources
-# ============================
-
-class InstitutionResource(resources.ModelResource):
-    class Meta:
-        model = Institution
-        fields = '__all__'
-
-class SchoolAccountResource(resources.ModelResource):
-    class Meta:
-        model = SchoolAccount
-        fields = '__all__'
-
-# ============================
-# Institution Admin
-# ============================
-
-@admin.register(Institution)
-class InstitutionAdmin(ExportMixin, admin.ModelAdmin):
-    resource_class = InstitutionResource
-    list_display = (
-        'name', 'code', 'school_type', 'category',
-        'county', 'sub_county', 'ward', 'created_at'
-    )
-    search_fields = ('name', 'code', 'county', 'sub_county', 'ward')
-    list_filter = ('school_type', 'county', 'sub_county')
-    readonly_fields = ('code', 'created_at', 'updated_at')
-    ordering = ('-created_at',)
-
-    fieldsets = (
-        ('Basic Info', {
-            'fields': ('name', 'code', 'school_type')
-        }),
-        ('Location', {
-            'fields': ('county', 'sub_county', 'ward')
-        }),
-        ('Branding & Contact', {
-            'fields': ('logo', 'theme_color', 'email', 'phone_number', 'website')
-        }),
-        ('Audit Info', {
-            'fields': ('created_at', 'updated_at')
-        }),
-    )
-
-    @admin.display(description='Category')
-    def category(self, obj):
-        # Example logic: title case the school_type for display
-        return obj.school_type.title()
-
-# ============================
-# School Account Admin
-# ============================
 
 @admin.register(SchoolAccount)
-class SchoolAccountAdmin(ExportMixin, admin.ModelAdmin):
-    resource_class = SchoolAccountResource
+class SchoolAccountAdmin(admin.ModelAdmin):
     list_display = (
-        'institution', 'account_name', 'account_number',
-        'bank_name', 'payment_type', 'is_default'
+        'institution', 'account_name', 'account_number', 'payment_type',
+        'bank_name', 'mpesa_till_number', 'is_default',
+        'created_at', 'updated_at',
     )
-    search_fields = ('account_name', 'account_number', 'bank_name')
-    list_filter = ('payment_type', 'is_default')
-    ordering = ('institution', 'account_name')
+    list_filter = ('payment_type', 'is_default', 'institution__county', 'institution__school_type')
+    search_fields = ('account_name', 'account_number', 'bank_name', 'institution__name')
+    ordering = ('-created_at',)
+    autocomplete_fields = ('institution',)
     readonly_fields = ('created_at', 'updated_at')
 
+
+class SchoolAccountInline(admin.TabularInline):
+    model = SchoolAccount
+    extra = 1
+    fields = ('account_name', 'account_number', 'payment_type', 'is_default')
+    show_change_link = True
+
+
+@admin.register(Institution)
+class InstitutionAdmin(admin.ModelAdmin):
+    list_display = (
+        'name', 'code', 'institution_type', 'school_type',
+        'country', 'county', 'sub_county', 'ward',
+        'phone', 'email', 'established_year', 'created_at',
+    )
+    list_filter = ('institution_type', 'school_type', 'country', 'county')
+    search_fields = ('name', 'code', 'email', 'phone', 'registration_number')
+    ordering = ('name',)
+    inlines = [SchoolAccountInline]
+
     fieldsets = (
-        (None, {
-            'fields': (
-                'institution', 'account_name', 'account_number',
-                'bank_name', 'branch', 'payment_type', 'is_default'
-            )
+        ("Basic Information", {
+            'fields': ('name', 'code', 'registration_number', 'institution_type', 'school_type')
         }),
-        ('Audit Info', {
-            'fields': ('created_at', 'updated_at')
+        ("Location & Contact", {
+            'fields': ('country', 'county', 'sub_county', 'ward', 'village', 'address', 'phone', 'email', 'website')
+        }),
+        ("Branding", {
+            'fields': ('logo', 'primary_color', 'secondary_color', 'theme_mode')
+        }),
+        ("Ownership & Establishment", {
+            'fields': ('ownership', 'funding_source', 'established_year')
+        }),
+        ("Timestamps & Metadata", {
+            'fields': ('created_at', 'updated_at', 'extra_info')
         }),
     )
+
+    readonly_fields = ('created_at', 'updated_at')

@@ -1,45 +1,48 @@
 from django.db import models
+from django.utils import timezone
 from institutions.models import Institution
-from classes.models import Stream
+from classes.models import Stream, ClassLevel
 from subjects.models import Subject
 from teachers.models import Teacher
+from academics.models import AcademicYear, Term
+from accounts.models import CustomUser
 
 
-class Period(models.Model):
-    """Defines a specific lesson slot within an institution."""
-    DAY_CHOICES = [
-        ('MON', 'Monday'),
-        ('TUE', 'Tuesday'),
-        ('WED', 'Wednesday'),
-        ('THU', 'Thursday'),
-        ('FRI', 'Friday'),
-    ]
-    day = models.CharField(max_length=3, choices=DAY_CHOICES)
+class PeriodTemplate(models.Model):
+    """
+    Defines the time blocks for lessons per day, per class level.
+    """
+    institution = models.ForeignKey(Institution, on_delete=models.CASCADE, related_name='period_templates')
+    class_level = models.ForeignKey(ClassLevel, on_delete=models.CASCADE, related_name='period_templates')
+    day = models.CharField(max_length=9, choices=[
+        ('Monday', 'Monday'), ('Tuesday', 'Tuesday'), ('Wednesday', 'Wednesday'),
+        ('Thursday', 'Thursday'), ('Friday', 'Friday'),
+        ('Saturday', 'Saturday'), ('Sunday', 'Sunday'),
+    ])
+    period_number = models.PositiveSmallIntegerField()
     start_time = models.TimeField()
     end_time = models.TimeField()
-    institution = models.ForeignKey(Institution, on_delete=models.CASCADE, related_name='periods')
 
     class Meta:
-        unique_together = ('day', 'start_time', 'institution')
-        ordering = ['day', 'start_time']
-        verbose_name = "Period"
-        verbose_name_plural = "Periods"
+        unique_together = ('institution', 'class_level', 'day', 'period_number')
+        ordering = ['class_level', 'day', 'period_number']
 
     def __str__(self):
-        return f"{self.get_day_display()} {self.start_time.strftime('%H:%M')} - {self.end_time.strftime('%H:%M')}"
+        return f"{self.class_level.name} | {self.day} P{self.period_number} ({self.start_time}-{self.end_time})"
 
 
 class Room(models.Model):
-    """Physical or virtual room for lessons."""
+    """
+    Represents a classroom or specialized room (e.g., lab).
+    """
     name = models.CharField(max_length=100)
     capacity = models.PositiveIntegerField(null=True, blank=True)
     is_lab = models.BooleanField(default=False)
     institution = models.ForeignKey(Institution, on_delete=models.CASCADE, related_name='rooms')
 
     class Meta:
-        unique_together = ('name', 'institution')  # Prevent duplicate room names per institution
-        verbose_name = "Room"
-        verbose_name_plural = "Rooms"
+        unique_together = ('name', 'institution')
+        ordering = ['name']
 
     def __str__(self):
         return f"{self.name} ({self.institution.name})"
@@ -47,46 +50,105 @@ class Room(models.Model):
 
 class SubjectAssignment(models.Model):
     """
-    Links a teacher to a subject and a stream with weekly lesson frequency.
-    Ensures assignments are institution-scoped.
+    Links teachers to subjects and streams, defining teaching responsibilities.
     """
     teacher = models.ForeignKey(Teacher, on_delete=models.CASCADE, related_name='assignments')
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name='assignments')
     stream = models.ForeignKey(Stream, on_delete=models.CASCADE, related_name='subject_assignments')
     lessons_per_week = models.PositiveSmallIntegerField()
+    is_substitutable = models.BooleanField(default=True)
     institution = models.ForeignKey(Institution, on_delete=models.CASCADE, related_name='subject_assignments')
 
     class Meta:
         unique_together = ('teacher', 'subject', 'stream', 'institution')
-        verbose_name = "Subject Assignment"
-        verbose_name_plural = "Subject Assignments"
+        ordering = ['stream', 'subject']
 
     def __str__(self):
-        return f"{self.teacher.user.get_full_name()} - {self.subject.name} - {self.stream.name} ({self.institution.name})"
+        return f"{self.teacher} | {self.subject.name} | {self.stream.name}"
+
+
+class TimetableVersion(models.Model):
+    """
+    Groups all timetable entries under a term-based version for an institution.
+    """
+    institution = models.ForeignKey(Institution, on_delete=models.CASCADE, related_name='timetable_versions')
+    academic_year = models.ForeignKey(AcademicYear, on_delete=models.CASCADE)
+    term = models.ForeignKey(Term, on_delete=models.CASCADE)
+    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True)
+    is_finalized = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.institution.name} | {self.term.name} | v{self.pk}"
 
 
 class TimetableEntry(models.Model):
     """
-    Final AI-generated or manually created timetable entry.
-    Uniqueness enforced on period + stream + institution for conflict-free scheduling.
+    One scheduled subject period for a stream, within a timetable version.
     """
-    period = models.ForeignKey(Period, on_delete=models.CASCADE, related_name='entries')
+    version = models.ForeignKey(TimetableVersion, on_delete=models.CASCADE, related_name='entries')
+    period_template = models.ForeignKey(PeriodTemplate, on_delete=models.CASCADE, related_name='entries')
     stream = models.ForeignKey(Stream, on_delete=models.CASCADE, related_name='timetable_entries')
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name='timetable_entries')
     teacher = models.ForeignKey(Teacher, on_delete=models.CASCADE, related_name='timetable_entries')
     room = models.ForeignKey(Room, on_delete=models.SET_NULL, null=True, blank=True, related_name='timetable_entries')
-    institution = models.ForeignKey(Institution, on_delete=models.CASCADE, related_name='timetable_entries')
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)  # Track updates for audit & AI feedback
 
     class Meta:
-        unique_together = ('period', 'stream', 'institution')
-        ordering = ['period__day', 'period__start_time']
-        verbose_name = "Timetable Entry"
-        verbose_name_plural = "Timetable Entries"
+        unique_together = ('version', 'period_template', 'stream')
+        ordering = ['period_template__day', 'period_template__start_time']
 
     def __str__(self):
-        return (
-            f"{self.stream.name} - {self.subject.name} - "
-            f"{self.teacher.user.get_full_name()} @ {self.period} ({self.institution.name})"
-        )
+        return f"{self.stream.name} | {self.subject.name} | {self.period_template.day} P{self.period_template.period_number}"
+
+
+class TimetableNotificationSetting(models.Model):
+    """
+    Controls notification behavior per institution for timetable alerts.
+    """
+    institution = models.OneToOneField(Institution, on_delete=models.CASCADE, related_name='timetable_settings')
+    enable_reminders = models.BooleanField(default=True)
+    reminder_lead_time_minutes = models.PositiveIntegerField(default=10)
+    notify_channels = models.JSONField(default=list)  # e.g., ['popup', 'email']
+    daily_overview_enabled = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.institution.name} Notification Settings"
+
+
+class TimetableChangeLog(models.Model):
+    """
+    Logs changes to timetable entries for auditability.
+    """
+    entry = models.ForeignKey(TimetableEntry, on_delete=models.CASCADE, related_name='change_logs')
+    changed_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True)
+    change_type = models.CharField(max_length=50, choices=[
+        ('created', 'Created'), ('modified', 'Modified'),
+        ('rescheduled', 'Rescheduled'), ('cancelled', 'Cancelled')
+    ])
+    timestamp = models.DateTimeField(auto_now_add=True)
+    notes = models.TextField(blank=True)
+
+    def __str__(self):
+        return f"{self.change_type} | {self.entry} | {self.timestamp.strftime('%Y-%m-%d %H:%M')}"
+
+
+class TeacherAvailabilityOverride(models.Model):
+    """
+    Declares when a teacher is unavailable (e.g., leave, emergency).
+    """
+    teacher = models.ForeignKey(Teacher, on_delete=models.CASCADE, related_name='availability_exceptions')
+    stream = models.ForeignKey(Stream, on_delete=models.SET_NULL, null=True, blank=True)
+    date = models.DateField()
+    reason = models.TextField(blank=True)
+    allowed_to_substitute = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-date']
+
+    def __str__(self):
+        return f"{self.teacher.user.get_full_name()} unavailable on {self.date}"

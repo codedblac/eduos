@@ -1,76 +1,95 @@
-from django.shortcuts import get_object_or_404
-from rest_framework import generics, permissions, status
+from rest_framework import viewsets, status, permissions
+from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.views import APIView
-from .models import Student
-from .serializers import StudentSerializer
-from .permissions import (
-    CanManageStudents,
-    CanViewStudentProfile,
-    IsAdminOrSuperAdmin,
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import SearchFilter, OrderingFilter
+
+from .models import Student, MedicalFlag, StudentHistory
+from .serializers import (
+    StudentSerializer,
+    MedicalFlagSerializer,
+    StudentHistorySerializer
 )
-from .ai_engine import analyze_student_performance  # AI analysis function
+from .permissions import IsInstitutionAdminOrStaff, IsReadOnlyOrInstitutionStaff
+from .filters import StudentFilter, MedicalFlagFilter
+from .analytics import (
+    get_class_level_distribution,
+    get_stream_distribution,
+    get_gender_breakdown_per_class,
+    get_overcrowded_streams,
+    get_empty_classes_and_streams,
+    get_total_summary,
+    get_enrollment_status_stats
+)
+from .ai import StudentAIAnalyzer
 
 
-class StudentListCreateView(generics.ListCreateAPIView):
-    queryset = Student.objects.select_related('institution', 'stream').all()
+# ================================
+# 🚸 Student Management
+# ================================
+
+class StudentViewSet(viewsets.ModelViewSet):
+    queryset = Student.objects.select_related('institution', 'stream', 'class_level', 'assigned_class_teacher').all()
     serializer_class = StudentSerializer
-    permission_classes = [permissions.IsAuthenticated, CanManageStudents]
-
-    def perform_create(self, serializer):
-        serializer.save()
-
-
-class StudentDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Student.objects.select_related('institution', 'stream').all()
-    serializer_class = StudentSerializer
-    permission_classes = [permissions.IsAuthenticated, CanViewStudentProfile]
-
-    def retrieve(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = self.get_serializer(instance)
-
-        # AI-powered performance analysis and feedback generation
-        ai_insights = analyze_student_performance(instance)
-
-        data = serializer.data
-        data['ai_insights'] = ai_insights
-
-        return Response(data)
-
-
-class MyChildrenView(generics.ListAPIView):
-    serializer_class = StudentSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsReadOnlyOrInstitutionStaff]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_class = StudentFilter
+    search_fields = ['first_name', 'last_name', 'admission_number', 'national_id']
+    ordering_fields = ['first_name', 'last_name', 'date_joined', 'class_level__order']
+    ordering = ['class_level__order', 'stream__order', 'last_name']
 
     def get_queryset(self):
         user = self.request.user
-        if user.role != 'parent':
-            return Student.objects.none()
-        return Student.objects.filter(parents__id=user.id)
+        return self.queryset.filter(institution=user.institution)
+
+    @action(detail=True, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def ai_insights(self, request, pk=None):
+        student = self.get_object()
+        analyzer = StudentAIAnalyzer(student)
+        result = analyzer.run_full_analysis()
+        return Response(result, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def history(self, request, pk=None):
+        student = self.get_object()
+        history = StudentHistory.objects.filter(student=student)
+        serializer = StudentHistorySerializer(history, many=True)
+        return Response(serializer.data)
 
 
-class MyStreamStudentsView(generics.ListAPIView):
-    serializer_class = StudentSerializer
-    permission_classes = [permissions.IsAuthenticated]
+# ================================
+# 🏥 Medical Alerts
+# ================================
+
+class MedicalFlagViewSet(viewsets.ModelViewSet):
+    queryset = MedicalFlag.objects.select_related('student').all()
+    serializer_class = MedicalFlagSerializer
+    permission_classes = [permissions.IsAuthenticated, IsInstitutionAdminOrStaff]
+    filter_backends = [DjangoFilterBackend, SearchFilter]
+    filterset_class = MedicalFlagFilter
+    search_fields = ['condition', 'student__first_name', 'student__last_name']
 
     def get_queryset(self):
-        user = self.request.user
-        if user.role != 'teacher':
-            return Student.objects.none()
-        return Student.objects.filter(stream__teachers__id=user.id)
+        return self.queryset.filter(student__institution=self.request.user.institution)
 
 
-class UpdateEnrollmentStatusView(APIView):
-    permission_classes = [permissions.IsAuthenticated, IsAdminOrSuperAdmin]
+# ================================
+# 🧠 AI + 📊 Analytics APIs
+# ================================
 
-    def post(self, request, pk):
-        student = get_object_or_404(Student, pk=pk)
-        status = request.data.get('enrollment_status')
+from rest_framework.views import APIView
 
-        if status not in dict(Student.ENROLLMENT_STATUSES):
-            return Response({"detail": "Invalid status."}, status=status.HTTP_400_BAD_REQUEST)
+class StudentAnalyticsDashboardView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsInstitutionAdminOrStaff]
 
-        student.enrollment_status = status
-        student.save(update_fields=["enrollment_status"])
-        return Response({"detail": f"Student enrollment status updated to '{status}'."})
+    def get(self, request, *args, **kwargs):
+        institution_id = request.user.institution_id
+        return Response({
+            "distribution_by_class": get_class_level_distribution(institution_id),
+            "distribution_by_stream": get_stream_distribution(institution_id),
+            "gender_breakdown": get_gender_breakdown_per_class(institution_id),
+            "overcrowded_streams": get_overcrowded_streams(institution_id),
+            "empty_classes_streams": get_empty_classes_and_streams(institution_id),
+            "enrollment_stats": get_enrollment_status_stats(institution_id),
+            "totals": get_total_summary(institution_id)
+        }, status=status.HTTP_200_OK)

@@ -1,15 +1,23 @@
-# classes/urls.py
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from .views import (
-    ClassLevelListCreateView,
-    ClassLevelRetrieveUpdateDestroyView,
-    StreamListCreateView,
-    StreamRetrieveUpdateDestroyView,
+    ClassLevelViewSet,
+    StreamViewSet,
+    ClassAnalyticsView,
+    StreamRedistributionSuggestionView,
+    ClassDistributionReportView
 )
 
+router = DefaultRouter()
+router.register(r'class-levels', ClassLevelViewSet, basename='classlevel')
+router.register(r'streams', StreamViewSet, basename='stream')
+
 urlpatterns = [
-    path('classlevels/', ClassLevelListCreateView.as_view(), name='classlevel-list-create'),
-    path('classlevels/<int:pk>/', ClassLevelRetrieveUpdateDestroyView.as_view(), name='classlevel-detail'),
-    path('streams/', StreamListCreateView.as_view(), name='stream-list-create'),
-    path('streams/<int:pk>/', StreamRetrieveUpdateDestroyView.as_view(), name='stream-detail'),
+    # Core CRUD endpoints
+    path('', include(router.urls)),
+
+    # Analytics and AI endpoints
+    path('analytics/summary/', ClassAnalyticsView.as_view(), name='class-analytics-summary'),
+    path('ai/stream-redistribution/', StreamRedistributionSuggestionView.as_view(), name='stream-redistribution'),
+    path('ai/class-distribution-report/', ClassDistributionReportView.as_view(), name='class-distribution-report'),
 ]

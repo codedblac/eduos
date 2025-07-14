@@ -3,8 +3,10 @@ from rest_framework import permissions
 
 class IsAdminOrReadOnly(permissions.BasePermission):
     """
-    Allow read-only access to everyone, write access only to admin users.
+    Allow read-only access to everyone.
+    Write access only to system admins (is_staff).
     """
+
     def has_permission(self, request, view):
         if request.method in permissions.SAFE_METHODS:
             return True
@@ -13,37 +15,80 @@ class IsAdminOrReadOnly(permissions.BasePermission):
 
 class IsInstitutionAdminOrReadOnly(permissions.BasePermission):
     """
-    Write permissions for institutional admins, read-only for others.
-    Assumes `request.user.institution` exists.
+    Institutional admins can write, everyone else read-only.
+    Assumes `request.user.institution` exists and institution admin flag is implemented.
     """
+
     def has_permission(self, request, view):
         if request.method in permissions.SAFE_METHODS:
             return True
-        return request.user.is_authenticated and hasattr(request.user, 'institution')
+
+        user = request.user
+        return (
+            user.is_authenticated and
+            hasattr(user, 'institution') and
+            (user.is_staff or getattr(user, 'is_institution_admin', False))
+        )
 
 
 class IsTeacherOrAdminCanEdit(permissions.BasePermission):
     """
-    Teachers can update progress; only admins can edit syllabus content.
+    Teachers can update their own syllabus progress.
+    Only institutional admins/staff can modify syllabus content.
     """
+
     def has_object_permission(self, request, view, obj):
         if request.method in permissions.SAFE_METHODS:
             return True
 
-        # If updating progress
-        if hasattr(obj, 'teacher') and obj.teacher == request.user:
+        user = request.user
+
+        # Progress update by the teacher
+        if hasattr(obj, 'teacher') and obj.teacher == user:
             return True
 
-        # Only admin or staff can modify
-        return request.user.is_authenticated and request.user.is_staff
+        # Syllabus-level write access
+        return user.is_authenticated and (user.is_staff or getattr(user, 'is_institution_admin', False))
 
 
 class IsSyllabusOwnerOrAdmin(permissions.BasePermission):
     """
-    Only the user who created the item or an admin can modify it.
+    Write permissions allowed only to the user who created the object or admins.
+    Read access allowed to all authenticated users.
     """
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+
+        user = request.user
+        return user.is_authenticated and (obj.created_by == user or user.is_staff or getattr(user, 'is_institution_admin', False))
+
+
+class IsOwnerOrReadOnly(permissions.BasePermission):
+    """
+    Generic permission class for models with `created_by`.
+    """
+
     def has_object_permission(self, request, view, obj):
         if request.method in permissions.SAFE_METHODS:
             return True
 
         return obj.created_by == request.user or request.user.is_staff
+
+
+class IsAuthenticatedAndFromSameInstitution(permissions.BasePermission):
+    """
+    Ensure object belongs to same institution as the user.
+    Can be used with list views or filter sets.
+    """
+
+    def has_permission(self, request, view):
+        return request.user and request.user.is_authenticated and hasattr(request.user, 'institution')
+
+    def has_object_permission(self, request, view, obj):
+        return (
+            request.user and request.user.is_authenticated and
+            hasattr(request.user, 'institution') and
+            getattr(obj, 'institution', None) == request.user.institution
+        )

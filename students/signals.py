@@ -1,24 +1,54 @@
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
-from exams.models import ExamResult
-from .models import Student
-from .ai_engine import StudentAIAnalyzer
+from django.utils import timezone
+from .models import Student, MedicalFlag
+from .tasks import run_ai_analysis_on_students, notify_critical_medical_flags
+from notifications.utils import send_notification_to_user
+import uuid
 
 
-@receiver(post_save, sender=ExamResult)
-def exam_result_post_save(sender, instance, created, **kwargs):
+@receiver(pre_save, sender=Student)
+def generate_admission_number(sender, instance, **kwargs):
     """
-    When an ExamResult is saved (new or updated marks), trigger AI analysis
-    for that student to generate feedback, comments, suggestions.
+    Auto-generate an admission number if not set (optional logic).
+    Assumes format: INSTYYYYXXXX
     """
-    student = instance.student
+    if not instance.admission_number:
+        year = timezone.now().year
+        uid = uuid.uuid4().hex[:6].upper()
+        instance.admission_number = f"{instance.institution.id}{year}{uid}"
 
-    # Run AI analysis (implement this function in ai_engine.py)
-    insights = StudentAIAnalyzer(student)
 
-    # Save or update student's AI insights (adjust based on your model design)
-    student.ai_insights = insights.get('summary', '')
-    student.performance_comments = insights.get('comments', '')
-    student.suggested_books = insights.get('recommended_books', [])
-    student.suggested_teachers = insights.get('recommended_teachers', [])
-    student.save(update_fields=['ai_insights', 'performance_comments'])
+@receiver(post_save, sender=Student)
+def run_ai_and_notify_on_student_save(sender, instance, created, **kwargs):
+    """
+    Trigger AI analysis and notify institution staff upon student creation/update.
+    """
+    if created:
+        # Notify admins
+        admins = instance.institution.customuser_set.filter(is_staff=True)
+        for admin in admins:
+            send_notification_to_user(
+                admin,
+                title="New Student Registered",
+                message=f"{instance} has been admitted to {instance.institution.name}."
+            )
+
+    # Trigger async AI analysis
+    run_ai_analysis_on_students.delay(institution_id=instance.institution.id)
+
+
+@receiver(post_save, sender=MedicalFlag)
+def notify_critical_medical_flag(sender, instance, created, **kwargs):
+    """
+    Notify institution staff when a critical medical flag is added.
+    """
+    if created and instance.critical:
+        student = instance.student
+        admins = student.institution.customuser_set.filter(is_staff=True)
+        for admin in admins:
+            send_notification_to_user(
+                admin,
+                title="Critical Medical Flag",
+                message=f"{student} has a critical condition: {instance.condition}."
+            )

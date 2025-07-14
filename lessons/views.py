@@ -1,78 +1,124 @@
-from django.shortcuts import render
-
-# Create your views here.
-from rest_framework import viewsets, status
-from rest_framework.response import Response
+from rest_framework import viewsets, permissions, filters, status
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
+from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
-from lessons.models import LessonPlan, LessonSession, LessonSchedule, LessonAttachment
-from lessons.serializers import (
-    LessonPlanSerializer, LessonSessionSerializer, 
-    LessonScheduleSerializer, LessonAttachmentSerializer
+from .models import (
+    LessonPlan, LessonSchedule, LessonSession,
+    LessonAttachment, LessonScaffoldSuggestion
 )
-from lessons.permissions import IsTeacherOrReadOnly
-from lessons.filters import LessonPlanFilter, LessonSessionFilter, LessonScheduleFilter
-from lessons.analytics import (
-    get_teacher_workload, get_lesson_coverage_report, 
-    get_missed_lessons_stats, get_average_lesson_duration
+from .serializers import (
+    LessonPlanSerializer, LessonScheduleSerializer, LessonSessionSerializer,
+    LessonAttachmentSerializer, LessonScaffoldSuggestionSerializer
 )
-from lessons.ai import generate_lesson_plan_suggestions, predict_uncovered_topics
+from .permissions import IsTeacherOrAdmin, IsOwnerOrReadOnly
+from .filters import LessonPlanFilter, LessonScheduleFilter, LessonSessionFilter
+from .ai import LessonAIEngine
+from .analytics import LessonAnalyticsEngine
 
+
+# ----------------------------
+# Core ViewSets
+# ----------------------------
 
 class LessonPlanViewSet(viewsets.ModelViewSet):
     queryset = LessonPlan.objects.all()
     serializer_class = LessonPlanSerializer
-    permission_classes = [IsAuthenticated, IsTeacherOrReadOnly]
-    filter_backends = [DjangoFilterBackend]
+    permission_classes = [IsTeacherOrAdmin]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_class = LessonPlanFilter
+    search_fields = ['title', 'objectives', 'resources']
 
-    @action(detail=False, methods=['get'])
-    def suggestions(self, request):
-        suggestions = generate_lesson_plan_suggestions()
-        return Response(suggestions)
+    @action(detail=True, methods=['get'], url_path='ai-suggestions')
+    def ai_suggestions(self, request, pk=None):
+        lesson = self.get_object()
+        suggestions = LessonAIEngine.suggest_for_lesson_plan(lesson)
+        return Response(suggestions, status=status.HTTP_200_OK)
 
-    @action(detail=False, methods=['get'])
-    def coverage_report(self, request):
-        term_id = request.query_params.get("term")
-        if not term_id:
-            return Response({"error": "Term parameter is required."}, status=status.HTTP_400_BAD_REQUEST)
-        report = get_lesson_coverage_report(term_id)
-        return Response(report)
+    @action(detail=False, methods=['get'], url_path='coverage-alerts')
+    def ai_coverage_alerts(self, request):
+        alerts = LessonAIEngine.detect_under_covered_topics()
+        return Response(alerts, status=status.HTTP_200_OK)
 
-
-class LessonSessionViewSet(viewsets.ModelViewSet):
-    queryset = LessonSession.objects.all()
-    serializer_class = LessonSessionSerializer
-    permission_classes = [IsAuthenticated, IsTeacherOrReadOnly]
-    filter_backends = [DjangoFilterBackend]
-    filterset_class = LessonSessionFilter
+    @action(detail=False, methods=['get'], url_path='analytics-summary')
+    def analytics_summary(self, request):
+        stats = LessonAnalyticsEngine.planning_summary()
+        return Response(stats, status=status.HTTP_200_OK)
 
 
 class LessonScheduleViewSet(viewsets.ModelViewSet):
     queryset = LessonSchedule.objects.all()
     serializer_class = LessonScheduleSerializer
-    permission_classes = [IsAuthenticated, IsTeacherOrReadOnly]
+    permission_classes = [IsTeacherOrAdmin]
     filter_backends = [DjangoFilterBackend]
     filterset_class = LessonScheduleFilter
+
+
+class LessonSessionViewSet(viewsets.ModelViewSet):
+    queryset = LessonSession.objects.all()
+    serializer_class = LessonSessionSerializer
+    permission_classes = [IsTeacherOrAdmin]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = LessonSessionFilter
+
+    @action(detail=False, methods=['get'], url_path='analytics')
+    def session_analytics(self, request):
+        stats = LessonAnalyticsEngine.session_analytics()
+        return Response(stats, status=status.HTTP_200_OK)
 
 
 class LessonAttachmentViewSet(viewsets.ModelViewSet):
     queryset = LessonAttachment.objects.all()
     serializer_class = LessonAttachmentSerializer
-    permission_classes = [IsAuthenticated, IsTeacherOrReadOnly]
+    permission_classes = [IsTeacherOrAdmin]
 
 
-class LessonAnalyticsViewSet(viewsets.ViewSet):
-    permission_classes = [IsAuthenticated]
+class LessonScaffoldSuggestionViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = LessonScaffoldSuggestion.objects.all()
+    serializer_class = LessonScaffoldSuggestionSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
-    def list(self, request):
-        data = {
-            "teacher_workload": get_teacher_workload(request.user),
-            "coverage_stats": get_lesson_coverage_report(request.query_params.get("term")),
-            "missed_lessons": get_missed_lessons_stats(),
-            "average_duration": get_average_lesson_duration(),
-            "syllabus_risks": predict_uncovered_topics(),
-        }
+
+# ----------------------------
+# AI & Analytics APIViews (Optional but useful for frontend clarity)
+# ----------------------------
+
+class LessonAISuggestionAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, lesson_plan_id):
+        suggestions = LessonAIEngine.suggest_for_lesson_plan_id(lesson_plan_id)
+        return Response(suggestions)
+
+
+class LessonCoverageAlertAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        alerts = LessonAIEngine.detect_under_covered_topics()
+        return Response(alerts)
+
+
+class LessonAnalyticsSummaryAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        data = LessonAnalyticsEngine.planning_summary()
+        return Response(data)
+
+
+class TeacherLessonAnalyticsAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, teacher_id):
+        stats = LessonAnalyticsEngine.teacher_lesson_stats(teacher_id)
+        return Response(stats)
+
+
+class InstitutionLessonAnalyticsAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, institution_id):
+        data = LessonAnalyticsEngine.institution_lesson_summary(institution_id)
         return Response(data)

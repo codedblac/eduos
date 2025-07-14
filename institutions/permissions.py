@@ -1,64 +1,86 @@
-# institutions/permissions.py
 from rest_framework import permissions
+from accounts.models import CustomUser
 
 
 class IsSuperAdmin(permissions.BasePermission):
-    """
-    Allows access only to super admins (e.g., school principals or platform superusers).
-    Super admins can manage all institutions and their details.
-    """
+    """Allows access only to Super Admins."""
+
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and request.user.role == CustomUser.Role.SUPER_ADMIN
+
+
+class IsInstitutionAdmin(permissions.BasePermission):
+    """Allows access only to Institution Admins."""
 
     def has_permission(self, request, view):
         user = request.user
-        # Assuming 'super_admin' is the role for principals or platform superusers
-        return user.is_authenticated and getattr(user, 'role', None) == 'super_admin'
+        return user.is_authenticated and user.role == CustomUser.Role.ADMIN and user.institution is not None
 
 
-class CanManageInstitution(permissions.BasePermission):
+class IsSameInstitutionOrSuperAdmin(permissions.BasePermission):
     """
-    Allows access to users who can manage a specific institution.
-    For example: admins or users assigned to that institution.
+    Grants access if user is Super Admin or object belongs to the same institution.
+    Used for models with an `institution` FK.
     """
 
     def has_object_permission(self, request, view, obj):
         user = request.user
         if not user.is_authenticated:
             return False
-
-        # Super admins can manage all
-        if getattr(user, 'role', None) == 'super_admin':
+        if user.role == CustomUser.Role.SUPER_ADMIN:
             return True
-
-        # Otherwise, check if user belongs to this institution and has admin or equivalent rights
-        if hasattr(user, 'institution') and user.institution == obj:
-            return user.role in ['admin', 'bursar', 'finance_officer', 'hostel_manager']
-
-        return False
+        return hasattr(obj, 'institution') and obj.institution == user.institution
 
 
-class CanManageSchoolAccounts(permissions.BasePermission):
+class IsSuperAdminOrReadOnly(permissions.BasePermission):
+    """Super Admins can read/write. Others only have read access."""
+
+    def has_permission(self, request, view):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        return request.user.is_authenticated and request.user.role == CustomUser.Role.SUPER_ADMIN
+
+
+class IsInstitutionAdminOrReadOnly(permissions.BasePermission):
     """
-    Allows users who can manage school financial accounts:
-    Usually admin, bursar, finance officer roles at the institution.
+    Institution Admins can create/update/delete within their institution.
+    Super Admins have full access. Others can only read.
+    """
+
+    def has_permission(self, request, view):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        user = request.user
+        return (
+            user.is_authenticated and
+            user.role in [CustomUser.Role.ADMIN, CustomUser.Role.SUPER_ADMIN]
+        )
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        user = request.user
+        if user.role == CustomUser.Role.SUPER_ADMIN:
+            return True
+        return hasattr(obj, 'institution') and obj.institution == user.institution
+
+
+class CanManageInstitutionData(permissions.BasePermission):
+    """
+    Super Admins can manage any institution.
+    Institution Admins can read and manage their own institution's related data.
     """
 
     def has_permission(self, request, view):
         user = request.user
         if not user.is_authenticated:
             return False
-
-        # Super admins can manage all
-        if getattr(user, 'role', None) == 'super_admin':
+        if user.role == CustomUser.Role.SUPER_ADMIN:
             return True
-
-        # Check if user has rights in their institution
-        return user.role in ['admin', 'bursar', 'finance_officer']
+        return request.method in permissions.SAFE_METHODS and user.role == CustomUser.Role.ADMIN
 
     def has_object_permission(self, request, view, obj):
-        # Object-level permission for SchoolAccount
         user = request.user
-        if getattr(user, 'role', None) == 'super_admin':
+        if user.role == CustomUser.Role.SUPER_ADMIN:
             return True
-
-        # User must belong to institution of the account
-        return obj.institution == getattr(user, 'institution', None) and user.role in ['admin', 'bursar', 'finance_officer']
+        return hasattr(obj, 'institution') and obj.institution == user.institution

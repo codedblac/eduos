@@ -1,138 +1,120 @@
-# assessments/tasks.py
-
-from datetime import timedelta
 from django.utils import timezone
-from django.db.models import Q
+from datetime import timedelta
+from celery import shared_task
 
-from assessments.models import (
-    Assessment, AssessmentSession, StudentAnswer,
-    AssessmentResult, RetakePolicy
+from .models import (
+    Assessment, AssessmentSession, AssessmentLock, RetakePolicy,
+    PerformanceTrend, Student, Subject, Term, AssessmentType
 )
-from django.contrib.auth import get_user_model
-
-from syllabus.models import SyllabusTopic
-from notifications.utils import send_notification_to_user
-from myproject.celery import app
-
-User = get_user_model()
+from notifications.utils import send_notification  # Assuming reusable utility
+from assessments.utils import generate_assessment_from_template  # Custom generator
+from django.db.models import Avg, Count
 
 
-@app.task
-def auto_grade_objective_assessments():
+@shared_task
+def auto_generate_assessments():
     """
-    Automatically grades multiple choice and objective assessments
-    that are pending grading and have an answer key.
+    Periodically generate AI/manual assessments from templates for remote students.
+    Triggered via scheduler or admin.
     """
-    pending_sessions = AssessmentSession.objects.filter(
-        status='submitted',
-        assessment__grading_mode='auto'
+    from .models import AssessmentTemplate
+
+    templates = AssessmentTemplate.objects.filter(is_active=True)
+    now_time = timezone.now()
+
+    for template in templates:
+        subject = template.type.subject_set.first()  # You may need to refine this
+        if not subject:
+            continue
+
+        for class_level in subject.class_levels.all():
+            assessment = generate_assessment_from_template(
+                template=template,
+                subject=subject,
+                class_level=class_level,
+                scheduled_date=now_time + timedelta(days=2)
+            )
+            print(f"Generated: {assessment}")
+
+
+@shared_task
+def disburse_assessments():
+    """
+    Sends notifications or schedules printable assessments to students.
+    """
+    now_time = timezone.now()
+    assessments = Assessment.objects.filter(
+        is_published=True,
+        scheduled_date__lte=now_time + timedelta(hours=6),
+        scheduled_date__gte=now_time
     )
 
-    for session in pending_sessions:
-        correct = 0
-        total = 0
-
-        for answer in session.answers.all():
-            if answer.question.correct_choice and answer.selected_choice:
-                total += 1
-                if answer.selected_choice == answer.question.correct_choice:
-                    correct += 1
-
-        percentage = (correct / total) * 100 if total else 0
-        AssessmentResult.objects.update_or_create(
-            session=session,
-            defaults={
-                'score': percentage,
-                'graded_on': timezone.now(),
-                'graded_by': None,
-                'status': 'graded'
-            }
-        )
-
-        session.status = 'graded'
-        session.save()
-
-        send_notification_to_user(
-            session.student.user,
-            title="Assessment Graded",
-            message=f"Your assessment for {session.assessment.title} has been auto-graded. Score: {percentage:.2f}%"
-        )
-
-
-@app.task
-def remind_upcoming_assessments():
-    """
-    Sends reminders to students about upcoming assessments within the next 24 hours.
-    """
-    upcoming_assessments = Assessment.objects.filter(
-        scheduled_date__range=[timezone.now(), timezone.now() + timedelta(hours=24)]
-    )
-
-    for assessment in upcoming_assessments:
-        students = assessment.target_students.all()
-        for student in students:
-            send_notification_to_user(
-                student.user,
-                title="Upcoming Assessment Reminder",
-                message=f"You have {assessment.title} scheduled for {assessment.scheduled_date.strftime('%Y-%m-%d %H:%M')}."
+    for assessment in assessments:
+        sessions = AssessmentSession.objects.filter(assessment=assessment)
+        for session in sessions:
+            send_notification(
+                user=session.student.user,
+                title="Upcoming Assessment",
+                message=f"You have '{assessment.title}' scheduled soon."
             )
 
 
-@app.task
-def generate_adaptive_followups():
+@shared_task
+def lock_past_due_assessments():
     """
-    For students with low performance, generate a suggested follow-up assessment (adaptive).
+    Locks assessments that have passed their submission window.
     """
-    low_scores = AssessmentResult.objects.filter(score__lt=40)
+    now_time = timezone.now()
+    assessments = Assessment.objects.filter(scheduled_date__lt=now_time)
 
-    for result in low_scores:
-        original = result.session.assessment
-        topic = original.topic
-
-        if not topic:
-            continue
-
-        # Optional: AI trigger to generate custom adaptive quiz (stubbed)
-        # from .ai import generate_adaptive_quiz
-        # generate_adaptive_quiz(student=result.session.student, topic=topic)
-
-        send_notification_to_user(
-            result.session.student.user,
-            title="Adaptive Practice Suggested",
-            message=f"We noticed you struggled with {topic.title}. A new practice quiz is available to help you improve!"
-        )
+    for assessment in assessments:
+        lock, created = AssessmentLock.objects.get_or_create(assessment=assessment)
+        if not lock.locked:
+            lock.locked = True
+            lock.locked_at = now_time
+            lock.reason = "Scheduled time elapsed"
+            lock.save()
 
 
-@app.task
-def archive_old_assessments():
+@shared_task
+def enforce_retake_policies():
     """
-    Archives assessments older than X months.
+    Prevents students from retaking assessments before cooldown or max attempts.
     """
-    threshold_date = timezone.now() - timedelta(days=180)
-    outdated = Assessment.objects.filter(
-        scheduled_date__lt=threshold_date,
-        status__in=['completed', 'graded']
-    )
-    outdated.update(is_archived=True)
+    now_time = timezone.now()
+    for policy in RetakePolicy.objects.all():
+        attempts = AssessmentSession.objects.filter(
+            assessment=policy.assessment,
+            student__in=Student.objects.all()
+        ).count()
+        if attempts >= policy.max_attempts:
+            AssessmentLock.objects.update_or_create(
+                assessment=policy.assessment,
+                defaults={"locked": True, "reason": "Retake limit reached"}
+            )
 
 
-@app.task
-def enforce_retake_policy():
+@shared_task
+def update_performance_trends():
     """
-    Enforces retake policies on failed assessments.
+    Update each student's subject trend.
     """
-    failed_results = AssessmentResult.objects.filter(score__lt=50, retake_eligible=False)
+    for student in Student.objects.all():
+        for subject in Subject.objects.all():
+            sessions = AssessmentSession.objects.filter(
+                student=student, assessment__subject=subject, is_graded=True
+            )
+            if sessions.exists():
+                avg_score = sessions.aggregate(avg=Avg('score'))['avg']
+                count = sessions.count()
+                term = sessions.order_by('-started_at').first().assessment.term
 
-    for result in failed_results:
-        policy = RetakePolicy.objects.filter(assessment=result.session.assessment).first()
-        if not policy:
-            continue
-
-        result.retake_eligible = True
-        result.save()
-
-        send_notification_to_user(
-            result.session.student.user,
-            title="Retake Available",
-            message=f"A retake for {result.session.assessment.title} is now available based on your performance and policy."
-        )
+                PerformanceTrend.objects.update_or_create(
+                    student=student,
+                    subject=subject,
+                    term=term,
+                    defaults={
+                        "average_score": avg_score,
+                        "assessment_count": count,
+                    }
+                )

@@ -1,36 +1,51 @@
-# timetable/filters.py
-
 import django_filters
-from .models import Room, SubjectAssignment, TimetableEntry
+from .models import (
+    PeriodTemplate, Room, SubjectAssignment, TimetableEntry
+)
+from institutions.models import Institution
+from classes.models import Stream
+from teachers.models import Teacher
+from subjects.models import Subject
+
+
+class PeriodTemplateFilter(django_filters.FilterSet):
+    day = django_filters.CharFilter(lookup_expr='iexact')
+    institution = django_filters.ModelChoiceFilter(queryset=Institution.objects.all())
+    class_level = django_filters.NumberFilter(field_name='class_level__id')
+
+    class Meta:
+        model = PeriodTemplate
+        fields = ['day', 'institution', 'class_level']
+
 
 class RoomFilter(django_filters.FilterSet):
-    name = django_filters.CharFilter(field_name='name', lookup_expr='icontains')
-    room_type = django_filters.CharFilter(field_name='room_type', lookup_expr='icontains')
+    name = django_filters.CharFilter(lookup_expr='icontains')
+    is_lab = django_filters.BooleanFilter()
+    institution = django_filters.ModelChoiceFilter(queryset=Institution.objects.all())
 
     class Meta:
         model = Room
-        fields = ['name', 'room_type']
+        fields = ['name', 'is_lab', 'institution']
 
 
 class SubjectAssignmentFilter(django_filters.FilterSet):
-    teacher = django_filters.NumberFilter(field_name='teacher__id')
-    subject = django_filters.NumberFilter(field_name='subject__id')
-    stream = django_filters.NumberFilter(field_name='stream__id')
-    lessons_per_week = django_filters.NumberFilter()
+    teacher = django_filters.ModelChoiceFilter(queryset=Teacher.objects.all())
+    subject = django_filters.ModelChoiceFilter(queryset=Subject.objects.all())
+    stream = django_filters.ModelChoiceFilter(queryset=Stream.objects.all())
+    institution = django_filters.ModelChoiceFilter(queryset=Institution.objects.all())
 
     class Meta:
         model = SubjectAssignment
-        fields = ['teacher', 'subject', 'stream', 'lessons_per_week']
+        fields = ['teacher', 'subject', 'stream', 'institution']
 
 
 class TimetableEntryFilter(django_filters.FilterSet):
-    day_of_week = django_filters.CharFilter(lookup_expr='iexact')
-    timeslot = django_filters.NumberFilter()
-    teacher = django_filters.NumberFilter(field_name='teacher__id')
-    stream = django_filters.NumberFilter(field_name='stream__id')
-    subject = django_filters.NumberFilter(field_name='subject__id')
-    room = django_filters.NumberFilter(field_name='room__id')
+    period_template__day = django_filters.CharFilter(lookup_expr='iexact')
+    period_template__class_level = django_filters.NumberFilter(field_name='period_template__class_level__id')
+    stream = django_filters.ModelChoiceFilter(queryset=Stream.objects.all())
+    subject = django_filters.ModelChoiceFilter(queryset=Subject.objects.all())
+    teacher = django_filters.ModelChoiceFilter(queryset=Teacher.objects.all())
 
     class Meta:
         model = TimetableEntry
-        fields = ['day_of_week', 'timeslot', 'teacher', 'stream', 'subject', 'room']
+        fields = ['period_template__day', 'period_template__class_level', 'stream', 'subject', 'teacher']

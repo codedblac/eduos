@@ -1,156 +1,124 @@
-from rest_framework import generics, permissions, status
+from rest_framework import viewsets, status, filters
+from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.views import APIView
-from django.http import FileResponse, Http404
+from classes.models import Stream, ClassLevel
+from django_filters.rest_framework import DjangoFilterBackend
+from django.utils.timezone import now
 from django.shortcuts import get_object_or_404
-from .models import Room, SubjectAssignment, TimetableEntry
-from .serializers import RoomSerializer, SubjectAssignmentSerializer, TimetableEntrySerializer
-from .permissions import IsSuperAdmin, CanManageTimetable, CanViewOwnTimetable
-from teachers.models import Teacher
-from classes.models import Stream
-from .timetable_engine import generate_ai_timetable
-from .pdf_generator import generate_timetable_pdf
-import logging
-import io
 
-logger = logging.getLogger(__name__)
+from .models import (
+    Room, SubjectAssignment, TimetableEntry,
+    TimetableVersion, PeriodTemplate
+)
+from .serializers import (
+    RoomSerializer, SubjectAssignmentSerializer, TimetableEntrySerializer,
+    TimetableVersionSerializer, PeriodTemplateSerializer
+)
+from .filters import (
+    RoomFilter, SubjectAssignmentFilter, TimetableEntryFilter,
+    PeriodTemplateFilter
+)
+from .permissions import IsInstitutionAdminOrReadOnly
+from .ai import TimetableAIEngine
+from .analytics import TimetableAnalyticsEngine
+from .pdf_generator import generate_teacher_timetable_pdf, generate_stream_timetable_pdf
 
-# --- Room Views ---
-class RoomListCreateView(generics.ListCreateAPIView):
+
+class PeriodTemplateViewSet(viewsets.ModelViewSet):
+    queryset = PeriodTemplate.objects.all()
+    serializer_class = PeriodTemplateSerializer
+    permission_classes = [IsInstitutionAdminOrReadOnly]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filterset_class = PeriodTemplateFilter
+    search_fields = ['day', 'class_level__name', 'institution__name']
+
+
+class RoomViewSet(viewsets.ModelViewSet):
     queryset = Room.objects.all()
     serializer_class = RoomSerializer
-    permission_classes = [permissions.IsAuthenticated, CanManageTimetable]
+    permission_classes = [IsInstitutionAdminOrReadOnly]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filterset_class = RoomFilter
+    search_fields = ['name', 'institution__name']
 
 
-class RoomRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Room.objects.all()
-    serializer_class = RoomSerializer
-    permission_classes = [permissions.IsAuthenticated, CanManageTimetable]
-
-
-# --- SubjectAssignment Views ---
-class SubjectAssignmentListCreateView(generics.ListCreateAPIView):
+class SubjectAssignmentViewSet(viewsets.ModelViewSet):
     queryset = SubjectAssignment.objects.all()
     serializer_class = SubjectAssignmentSerializer
-    permission_classes = [permissions.IsAuthenticated, CanManageTimetable]
+    permission_classes = [IsInstitutionAdminOrReadOnly]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filterset_class = SubjectAssignmentFilter
+    search_fields = [
+        'teacher__user__first_name',
+        'teacher__user__last_name',
+        'subject__name',
+        'stream__name'
+    ]
 
 
-class SubjectAssignmentRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = SubjectAssignment.objects.all()
-    serializer_class = SubjectAssignmentSerializer
-    permission_classes = [permissions.IsAuthenticated, CanManageTimetable]
-
-
-# --- TimetableEntry Views ---
-class TimetableEntryListView(generics.ListAPIView):
-    serializer_class = TimetableEntrySerializer
-    permission_classes = [permissions.IsAuthenticated, CanViewOwnTimetable]
-
-    def get_queryset(self):
-        user = self.request.user
-        if user.role == 'teacher':
-            # Return only entries for this teacher
-            return TimetableEntry.objects.filter(teacher__user=user)
-        elif user.role in ['admin', 'superadmin']:
-            # Return all timetable entries for admins
-            return TimetableEntry.objects.all()
-        elif user.role == 'student':
-            # Students see timetable of their stream/class
-            if hasattr(user, 'student_profile') and user.student_profile.stream:
-                return TimetableEntry.objects.filter(stream=user.student_profile.stream)
-        return TimetableEntry.objects.none()
-
-
-class TimetableEntryRetrieveView(generics.RetrieveAPIView):
+class TimetableEntryViewSet(viewsets.ModelViewSet):
     queryset = TimetableEntry.objects.all()
     serializer_class = TimetableEntrySerializer
-    permission_classes = [permissions.IsAuthenticated, CanViewOwnTimetable]
+    permission_classes = [IsInstitutionAdminOrReadOnly]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filterset_class = TimetableEntryFilter
+    search_fields = ['subject__name', 'teacher__user__first_name', 'stream__name']
 
+    @action(detail=False, methods=['post'], url_path='auto-generate')
+    def auto_generate(self, request):
+        institution_id = request.data.get("institution_id")
+        term_id = request.data.get("term_id")
+        if not institution_id or not term_id:
+            return Response({"error": "institution_id and term_id are required"}, status=status.HTTP_400_BAD_REQUEST)
+        TimetableAIEngine.generate_timetable_for_term(institution_id, term_id)
+        return Response({"message": "Timetable generation started."}, status=status.HTTP_200_OK)
 
-# --- AI-Powered Timetable Generation ---
-class GenerateAITimetableView(APIView):
-    permission_classes = [permissions.IsAuthenticated, IsSuperAdmin]
+    @action(detail=False, methods=['post'], url_path='reschedule-absent')
+    def reschedule_absent(self, request):
+        teacher_id = request.data.get("teacher_id")
+        date = request.data.get("date")
+        institution_id = request.data.get("institution_id")
+        if not teacher_id or not date or not institution_id:
+            return Response({"error": "teacher_id, date, and institution_id are required"}, status=status.HTTP_400_BAD_REQUEST)
+        TimetableAIEngine.reschedule_absent_teacher(teacher_id, date, institution_id)
+        return Response({"message": "Rescheduling complete."}, status=status.HTTP_200_OK)
 
-    def post(self, request):
-        try:
-            generate_ai_timetable()
+    @action(detail=False, methods=['get'], url_path='stream-printable')
+    def printable_by_stream(self, request):
+        stream_id = request.query_params.get("stream_id")
+        if not stream_id:
+            return Response({"error": "stream_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        stream = get_object_or_404(Stream, pk=stream_id)
+        return generate_stream_timetable_pdf(stream)
 
-            # After generation, optionally associate timetable entries to teacher profiles
-            # (They are already linked via FK in TimetableEntry)
+    @action(detail=False, methods=['get'], url_path='teacher-printable')
+    def printable_by_teacher(self, request):
+        teacher = getattr(request.user, 'teacher', None)
+        if not teacher:
+            return Response({"error": "Only teachers can access this route"}, status=status.HTTP_403_FORBIDDEN)
+        return generate_teacher_timetable_pdf(teacher)
 
-            logger.info(f"AI Timetable generated by {request.user.email}")
-            return Response({"detail": "AI Timetable generated successfully."}, status=status.HTTP_201_CREATED)
-        except Exception as e:
-            logger.error(f"AI Timetable generation failed: {str(e)}")
-            return Response({"error": "Failed to generate timetable", "details": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    @action(detail=False, methods=['get'], url_path='teacher-reminders')
+    def teacher_reminders(self, request):
+        teacher = getattr(request.user, 'teacher', None)
+        if not teacher:
+            return Response({"error": "Not a teacher account"}, status=status.HTTP_403_FORBIDDEN)
+        buffer = int(request.query_params.get('lead_time', 10))
+        reminders = TimetableAIEngine.auto_notify_teachers_upcoming_lessons(buffer_minutes=buffer)
+        return Response(reminders, status=status.HTTP_200_OK)
 
+    @action(detail=False, methods=['get'], url_path='daily-overview')
+    def teacher_overview_today(self, request):
+        teacher = getattr(request.user, 'teacher', None)
+        if not teacher:
+            return Response({"error": "Not a teacher account"}, status=status.HTTP_403_FORBIDDEN)
+        overview = TimetableAIEngine.today_summary_for_teacher(teacher)
+        return Response(overview, status=status.HTTP_200_OK)
 
-# --- Timetable PDF Download Views ---
-
-class DownloadStreamTimetablePDF(APIView):
-    permission_classes = [permissions.IsAuthenticated, CanViewOwnTimetable]
-
-    def get(self, request, stream_id):
-        stream = get_object_or_404(Stream, id=stream_id)
-        user = request.user
-
-        # Permission check: user must belong to the same institution or be superuser
-        if not user.is_superuser and getattr(user, 'institution', None) != stream.institution:
-            return Response({"error": "Not permitted to access this stream timetable."}, status=status.HTTP_403_FORBIDDEN)
-
-        entries = TimetableEntry.objects.filter(stream=stream).select_related('subject', 'teacher', 'room')
-
-        if not entries.exists():
-            return Response({"error": "No timetable entries found for this stream."}, status=status.HTTP_404_NOT_FOUND)
-
-        institution = getattr(stream, 'institution', None)
-        if not institution:
-            return Response({"error": "Institution info not found for stream."}, status=status.HTTP_400_BAD_REQUEST)
-
-        days = getattr(institution, 'timetable_days', ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'])
-        periods_per_day = getattr(institution, 'periods_per_day', 7)
-
-        pdf_buffer = io.BytesIO()
-        generate_timetable_pdf(pdf_buffer, entries, title=f"Timetable for {stream.name}", days=days, periods_per_day=periods_per_day)
-        pdf_buffer.seek(0)
-
-        filename = f"timetable_{stream.name}.pdf"
-        return FileResponse(pdf_buffer, as_attachment=True, filename=filename, content_type='application/pdf')
-
-
-class DownloadTeacherTimetablePDF(APIView):
-    permission_classes = [permissions.IsAuthenticated, CanViewOwnTimetable]
-
-    def get(self, request, teacher_id=None):
-        user = request.user
-
-        if teacher_id is None:
-            try:
-                teacher = user.teacher_profile
-            except Teacher.DoesNotExist:
-                return Response({"error": "Teacher profile not found."}, status=status.HTTP_404_NOT_FOUND)
-        else:
-            teacher = get_object_or_404(Teacher, id=teacher_id)
-            if not user.is_superuser and teacher.user != user:
-                return Response({"error": "Not permitted to access this teacher timetable."}, status=status.HTTP_403_FORBIDDEN)
-
-        entries = TimetableEntry.objects.filter(teacher=teacher).select_related('subject', 'stream', 'room')
-
-        if not entries.exists():
-            return Response({"error": "No timetable entries found for this teacher."}, status=status.HTTP_404_NOT_FOUND)
-
-        institution = None
-        if hasattr(teacher, 'streams') and teacher.streams.exists():
-            institution = teacher.streams.first().institution
-        elif hasattr(teacher, 'institution'):
-            institution = teacher.institution
-
-        days = getattr(institution, 'timetable_days', ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'])
-        periods_per_day = getattr(institution, 'periods_per_day', 7)
-
-        pdf_buffer = io.BytesIO()
-        generate_timetable_pdf(pdf_buffer, entries, title=f"Timetable for {teacher.first_name} {teacher.last_name}", days=days, periods_per_day=periods_per_day)
-        pdf_buffer.seek(0)
-
-        filename = f"timetable_{teacher.first_name}_{teacher.last_name}.pdf"
-        return FileResponse(pdf_buffer, as_attachment=True, filename=filename, content_type='application/pdf')
+    @action(detail=False, methods=['get'], url_path='analytics')
+    def analytics(self, request):
+        institution_id = request.query_params.get("institution_id")
+        if not institution_id:
+            return Response({"error": "institution_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        analytics = TimetableAnalyticsEngine.audit_summary(institution_id)
+        return Response(analytics, status=status.HTTP_200_OK)

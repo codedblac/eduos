@@ -6,4 +6,4 @@ class AcademicsConfig(AppConfig):
     name = 'academics'
 
     def ready(self):
-        import academics.signals  # ensures signal registration on startup
+        import academics.signals  

@@ -1,49 +1,47 @@
-# admissions/tasks.py
-
 from celery import shared_task
 from django.utils import timezone
 from django.core.mail import send_mail
 from django.conf import settings
-from .models import AdmissionOffer, Applicant, EntranceExam
+from django.template.loader import render_to_string
+from .models import AdmissionOffer, Applicant
 from students.models import Student
-from accounts.models import CustomUser
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @shared_task
 def expire_old_offers():
     """
-    Mark offers as expired if past expiry_date and still pending.
+    Automatically mark all pending admission offers as expired if past expiry date.
     """
     today = timezone.now().date()
-    offers = AdmissionOffer.objects.filter(status='pending', expiry_date__lt=today)
-    for offer in offers:
-        offer.status = 'expired'
-        offer.save(update_fields=['status'])
+    expired_offers = AdmissionOffer.objects.filter(status='pending', expiry_date__lt=today)
+    count = expired_offers.update(status='expired')
+    logger.info(f"[Admissions] Expired {count} outdated admission offers.")
 
 
 @shared_task
 def notify_shortlisted_applicant(applicant_id):
     """
-    Notify applicant (email/SMS) if shortlisted.
+    Send an email notification to a shortlisted applicant.
+    Future support: SMS via Africa's Talking, Twilio, etc.
     """
     try:
         applicant = Applicant.objects.get(id=applicant_id)
         if applicant.email:
-            send_mail(
-                subject="You have been shortlisted!",
-                message=f"Dear {applicant.first_name},\n\nYou have been shortlisted for admission.",
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[applicant.email]
-            )
-        # Future: SMS logic here (Africa's Talking, Twilio, etc.)
+            subject = "🎉 You've been shortlisted for admission!"
+            message = render_to_string("emails/applicant_shortlisted.txt", {"applicant": applicant})
+            send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [applicant.email])
+            logger.info(f"[Admissions] Shortlist notification sent to {applicant.email}")
     except Applicant.DoesNotExist:
-        pass
+        logger.warning(f"[Admissions] Applicant ID {applicant_id} does not exist.")
 
 
 @shared_task
 def enroll_applicant_to_student(applicant_id):
     """
-    Convert an accepted applicant to a Student.
+    Converts an accepted applicant into a registered student.
     """
     try:
         applicant = Applicant.objects.get(id=applicant_id)
@@ -55,7 +53,7 @@ def enroll_applicant_to_student(applicant_id):
             gender=applicant.gender,
             date_of_birth=applicant.date_of_birth,
             class_level=applicant.entry_class_level,
-            admission_number=f"{applicant.admission_session.name}-{applicant.id}",
+            admission_number=f"{applicant.admission_session.name.replace(' ', '')}-{applicant.id}",
             institution=applicant.admission_session.institution,
             email=applicant.email,
             phone=applicant.phone,
@@ -68,23 +66,39 @@ def enroll_applicant_to_student(applicant_id):
         applicant.application_status = 'enrolled'
         applicant.save(update_fields=['application_status'])
 
+        logger.info(f"[Admissions] Enrolled applicant {applicant.id} as student {student.id}")
         return student.id
+
     except Applicant.DoesNotExist:
+        logger.error(f"[Admissions] Applicant ID {applicant_id} does not exist.")
         return None
 
 
 @shared_task
 def send_bulk_offer_notifications():
     """
-    Notify all pending applicants with valid offers.
+    Sends offer notifications to all applicants with pending, non-expired offers.
     """
-    offers = AdmissionOffer.objects.filter(status='pending')
+    today = timezone.now().date()
+    offers = AdmissionOffer.objects.filter(status='pending', expiry_date__gte=today)
+
+    success_count = 0
     for offer in offers:
         applicant = offer.applicant
         if applicant.email:
-            send_mail(
-                subject="Your Admission Offer",
-                message=f"Dear {applicant.first_name},\n\nPlease check your admission offer attached.",
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[applicant.email]
-            )
+            try:
+                message = render_to_string("emails/admission_offer.txt", {
+                    "applicant": applicant,
+                    "offer": offer,
+                })
+                send_mail(
+                    subject="📩 Your Admission Offer from EduOS School",
+                    message=message,
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[applicant.email],
+                )
+                success_count += 1
+            except Exception as e:
+                logger.error(f"[Admissions] Error sending offer to {applicant.email}: {e}")
+
+    logger.info(f"[Admissions] Sent {success_count} admission offer notifications.")

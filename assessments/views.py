@@ -1,161 +1,184 @@
-from django.shortcuts import render
+# assessments/views.py
 
-# Create your views here.
-from rest_framework import viewsets, status
-from rest_framework.response import Response
+from rest_framework import viewsets, status, generics, filters
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from django.utils import timezone
+from django.db.models import Avg, Count
 
-from .models import (
+from assessments.models import (
     AssessmentType, AssessmentTemplate, Assessment, Question, AnswerChoice,
-    AssessmentSession, StudentAnswer, GradingRubric, MarkingScheme,
-    AssessmentResult, Feedback, RetakePolicy
+    AssessmentSession, StudentAnswer, MarkingScheme, GradingRubric, Feedback,
+    RetakePolicy, AssessmentGroup, AssessmentWeight, AssessmentLock,
+    AssessmentVisibility, PerformanceTrend, CodeTestCase
 )
-from .serializers import (
+from assessments.serializers import (
     AssessmentTypeSerializer, AssessmentTemplateSerializer, AssessmentSerializer,
     QuestionSerializer, AnswerChoiceSerializer, AssessmentSessionSerializer,
-    StudentAnswerSerializer, GradingRubricSerializer, MarkingSchemeSerializer,
-    AssessmentResultSerializer, FeedbackSerializer, RetakePolicySerializer
+    StudentAnswerSerializer, MarkingSchemeSerializer, GradingRubricSerializer,
+    FeedbackSerializer, RetakePolicySerializer, AssessmentGroupSerializer,
+    AssessmentWeightSerializer, AssessmentLockSerializer, AssessmentVisibilitySerializer,
+    PerformanceTrendSerializer, CodeTestCaseSerializer
 )
-from .permissions import IsTeacherOrReadOnly, IsOwnerOrReadOnly
-from .ai import (
-    generate_assessment, generate_adaptive_assessment, predict_student_performance,
-    detect_cheating_patterns, generate_remedial_assessment
-)
-from .analytics import (
-    get_assessment_statistics, get_student_progress, get_question_performance
-)
+from assessments.analytics import *
+from assessments.ai import AssessmentAIEngine
+from students.models import Student
 
+
+# ---------------------- Basic Model ViewSets ----------------------
 
 class AssessmentTypeViewSet(viewsets.ModelViewSet):
     queryset = AssessmentType.objects.all()
     serializer_class = AssessmentTypeSerializer
-    permission_classes = [IsAuthenticated]
 
 
 class AssessmentTemplateViewSet(viewsets.ModelViewSet):
     queryset = AssessmentTemplate.objects.all()
     serializer_class = AssessmentTemplateSerializer
-    permission_classes = [IsAuthenticated]
 
 
 class AssessmentViewSet(viewsets.ModelViewSet):
     queryset = Assessment.objects.all()
     serializer_class = AssessmentSerializer
-    permission_classes = [IsAuthenticated, IsTeacherOrReadOnly]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['title']
+    ordering_fields = ['scheduled_date', 'total_marks']
 
     @action(detail=True, methods=['post'])
-    def auto_generate(self, request, pk=None):
+    def lock(self, request, pk=None):
         assessment = self.get_object()
-        generated = generate_assessment(assessment)
-        return Response(generated, status=status.HTTP_200_OK)
+        lock, created = AssessmentLock.objects.get_or_create(assessment=assessment)
+        lock.locked = True
+        lock.locked_at = timezone.now()
+        lock.save()
+        return Response({'status': 'Assessment locked'})
 
     @action(detail=True, methods=['post'])
-    def adaptive_test(self, request, pk=None):
+    def publish(self, request, pk=None):
         assessment = self.get_object()
-        student = request.user
-        adaptive = generate_adaptive_assessment(assessment, student)
-        return Response(adaptive, status=status.HTTP_200_OK)
+        assessment.is_published = True
+        assessment.save()
+        return Response({'status': 'Assessment published'})
 
 
-class QuestionViewSet(viewsets.ModelViewSet):
-    queryset = Question.objects.all()
-    serializer_class = QuestionSerializer
-    permission_classes = [IsAuthenticated]
+class AssessmentGroupViewSet(viewsets.ModelViewSet):
+    queryset = AssessmentGroup.objects.all()
+    serializer_class = AssessmentGroupSerializer
 
 
-class AnswerChoiceViewSet(viewsets.ModelViewSet):
-    queryset = AnswerChoice.objects.all()
-    serializer_class = AnswerChoiceSerializer
-    permission_classes = [IsAuthenticated]
+class AssessmentWeightViewSet(viewsets.ModelViewSet):
+    queryset = AssessmentWeight.objects.all()
+    serializer_class = AssessmentWeightSerializer
 
 
 class AssessmentSessionViewSet(viewsets.ModelViewSet):
-    queryset = AssessmentSession.objects.all()
+    queryset = AssessmentSession.objects.select_related('student', 'assessment')
     serializer_class = AssessmentSessionSerializer
-    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
 
 
 class StudentAnswerViewSet(viewsets.ModelViewSet):
-    queryset = StudentAnswer.objects.all()
+    queryset = StudentAnswer.objects.select_related('question', 'session')
     serializer_class = StudentAnswerSerializer
-    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
 
 
-class GradingRubricViewSet(viewsets.ModelViewSet):
-    queryset = GradingRubric.objects.all()
-    serializer_class = GradingRubricSerializer
-    permission_classes = [IsAuthenticated]
+class QuestionViewSet(viewsets.ModelViewSet):
+    queryset = Question.objects.select_related('assessment', 'topic')
+    serializer_class = QuestionSerializer
+
+
+class AnswerChoiceViewSet(viewsets.ModelViewSet):
+    queryset = AnswerChoice.objects.select_related('question')
+    serializer_class = AnswerChoiceSerializer
 
 
 class MarkingSchemeViewSet(viewsets.ModelViewSet):
-    queryset = MarkingScheme.objects.all()
+    queryset = MarkingScheme.objects.select_related('question')
     serializer_class = MarkingSchemeSerializer
-    permission_classes = [IsAuthenticated]
 
 
-class AssessmentResultViewSet(viewsets.ModelViewSet):
-    queryset = AssessmentResult.objects.all()
-    serializer_class = AssessmentResultSerializer
-    permission_classes = [IsAuthenticated]
-
-    @action(detail=False, methods=['get'])
-    def performance(self, request):
-        student = request.user
-        data = predict_student_performance(student)
-        return Response(data)
+class GradingRubricViewSet(viewsets.ModelViewSet):
+    queryset = GradingRubric.objects.select_related('question')
+    serializer_class = GradingRubricSerializer
 
 
 class FeedbackViewSet(viewsets.ModelViewSet):
-    queryset = Feedback.objects.all()
+    queryset = Feedback.objects.select_related('session')
     serializer_class = FeedbackSerializer
-    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
 
 
 class RetakePolicyViewSet(viewsets.ModelViewSet):
-    queryset = RetakePolicy.objects.all()
+    queryset = RetakePolicy.objects.select_related('assessment')
     serializer_class = RetakePolicySerializer
-    permission_classes = [IsAuthenticated]
 
 
-# Analytics Views
-from rest_framework.views import APIView
-
-class AssessmentStatisticsView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        stats = get_assessment_statistics()
-        return Response(stats)
+class AssessmentLockViewSet(viewsets.ModelViewSet):
+    queryset = AssessmentLock.objects.select_related('assessment')
+    serializer_class = AssessmentLockSerializer
 
 
-class StudentProgressView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        progress = get_student_progress(request.user)
-        return Response(progress)
+class AssessmentVisibilityViewSet(viewsets.ModelViewSet):
+    queryset = AssessmentVisibility.objects.select_related('session')
+    serializer_class = AssessmentVisibilitySerializer
 
 
-class QuestionPerformanceView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        performance = get_question_performance()
-        return Response(performance)
+class PerformanceTrendViewSet(viewsets.ModelViewSet):
+    queryset = PerformanceTrend.objects.select_related('student', 'subject')
+    serializer_class = PerformanceTrendSerializer
 
 
-class CheatingDetectionView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        result = detect_cheating_patterns()
-        return Response(result)
+class CodeTestCaseViewSet(viewsets.ModelViewSet):
+    queryset = CodeTestCase.objects.select_related('question')
+    serializer_class = CodeTestCaseSerializer
 
 
-class RemedialAssessmentView(APIView):
-    permission_classes = [IsAuthenticated]
+# ---------------------- Analytics ----------------------
 
-    def get(self, request):
-        result = generate_remedial_assessment(request.user)
-        return Response(result)
+class InstitutionPerformanceView(generics.GenericAPIView):
+    def get(self, request, *args, **kwargs):
+        institution = request.user.institution
+        data = overall_performance_summary(institution)
+        return Response(data)
+
+
+class StudentTrendView(generics.GenericAPIView):
+    def get(self, request, *args, **kwargs):
+        student = request.user.student
+        data = student_performance_trend(student)
+        return Response(data)
+
+
+class HeatmapView(generics.GenericAPIView):
+    def get(self, request, *args, **kwargs):
+        student = request.user.student
+        data = topic_mastery_heatmap(student)
+        return Response(data)
+
+
+class ParticipationRateView(generics.GenericAPIView):
+    def get(self, request, assessment_id, *args, **kwargs):
+        assessment = Assessment.objects.get(id=assessment_id)
+        data = assessment_participation_rate(assessment)
+        return Response(data)
+
+
+# ---------------------- AI Utilities ----------------------
+
+class AdaptiveAssessmentView(generics.GenericAPIView):
+    def get(self, request, subject_id):
+        student = request.user.student
+        subject = Subject.objects.get(id=subject_id)
+        questions = AssessmentAIEngine.generate_adaptive_assessment(
+            student=student,
+            subject=subject,
+            class_level=student.class_level,
+            term=student.current_term,
+        )
+        return Response(QuestionSerializer(questions, many=True).data)
+
+
+class PredictedScoreView(generics.GenericAPIView):
+    def get(self, request, subject_id):
+        student = request.user.student
+        subject = Subject.objects.get(id=subject_id)
+        score = AssessmentAIEngine.predict_student_score(student, subject)
+        return Response({"predicted_score": score})

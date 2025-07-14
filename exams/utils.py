@@ -1,115 +1,194 @@
 # exams/utils.py
 
+from typing import Dict, List, Optional
 from collections import defaultdict
-from django.db.models import F, Sum, Avg, Count
-from .models import ExamResult, Exam
+from django.db.models import Avg, Max, Min, Count
+
+from django.utils.text import slugify
+from exams.models import StudentScore, ExamResult, GradeBoundary, Exam, ExamSubject
 from students.models import Student
-import random
-
-# CBC-aligned grade boundaries (editable as needed)
-GRADE_BOUNDARIES = {
-    'A': 80,
-    'A-': 75,
-    'B+': 70,
-    'B': 65,
-    'B-': 60,
-    'C+': 55,
-    'C': 50,
-    'C-': 45,
-    'D+': 40,
-    'D': 35,
-    'E': 0,
-}
+from institutions.models import Institution
 
 
-def calculate_grade(marks: float) -> str:
+def get_grade_from_score(score: Optional[float], subject, institution: Institution) -> str:
     """
-    Return the corresponding grade for given marks.
+    Convert numeric score into a grade based on grade boundaries for an institution.
     """
-    for grade, boundary in sorted(GRADE_BOUNDARIES.items(), key=lambda x: -x[1]):
-        if marks >= boundary:
-            return grade
-    return 'E'  # Default fallback
+    if score is None:
+        return "N/A"
+
+    boundaries = GradeBoundary.objects.filter(
+        institution=institution,
+        subject=subject
+    ).order_by('-min_score')
+
+    for boundary in boundaries:
+        if boundary.min_score <= score <= boundary.max_score:
+            return boundary.grade
+
+    return "E"  # Default fallback
 
 
-def calculate_positions(exam: Exam):
+def calculate_position(scores_queryset) -> Dict[int, int]:
     """
-    Assign position per subject for all students in the exam.
+    Assign ranking positions based on descending scores.
+    Returns: {student_id: position}
     """
-    subject_results = defaultdict(list)
-    results = ExamResult.objects.filter(exam=exam).select_related('student', 'subject')
+    scores = list(scores_queryset.order_by('-score').values('student_id', 'score'))
+    position_map = {}
+    current_position = 1
+    prev_score = None
+    tied_count = 0
 
-    for result in results:
-        subject_results[result.subject_id].append(result)
+    for index, item in enumerate(scores):
+        if item['score'] != prev_score:
+            current_position += tied_count
+            tied_count = 1
+        else:
+            tied_count += 1
+        prev_score = item['score']
+        position_map[item['student_id']] = current_position
 
-    for subject_id, result_list in subject_results.items():
-        result_list.sort(key=lambda r: r.marks if r.marks is not None else -1, reverse=True)
-
-        position = 1
-        last_marks = None
-        same_rank_count = 0
-
-        for idx, result in enumerate(result_list):
-            if result.marks == last_marks:
-                result.position = position
-                same_rank_count += 1
-            else:
-                position = idx + 1
-                result.position = position
-                last_marks = result.marks
-                same_rank_count = 1
-            result.save(update_fields=["position"])
+    return position_map
 
 
-def calculate_total_and_average(exam: Exam):
+def calculate_exam_statistics(exam: Exam) -> dict:
     """
-    Calculate total score and average marks for each student in the exam.
+    Calculate aggregate statistics for an exam.
     """
-    student_scores = ExamResult.objects.filter(exam=exam).values('student').annotate(
-        total_marks=Sum('marks'),
-        avg_marks=Avg('marks')
+    scores = StudentScore.objects.filter(exam_subject__exam=exam)
+
+    if not scores.exists():
+        return {
+            'average': 0.0,
+            'max': 0.0,
+            'min': 0.0,
+            'most_common_grade': 'N/A'
+        }
+
+    aggregate_data = scores.aggregate(
+        avg=Avg('score'),
+        high=Max('score'),
+        low=Min('score')
     )
 
-    for entry in student_scores:
-        student = Student.objects.get(id=entry['student'])
-        student.total_marks = entry['total_marks'] or 0
-        student.average_marks = round(entry['avg_marks'] or 0, 2)
-        student.save(update_fields=["total_marks", "average_marks"])
+    grade_counts = scores.values('grade').annotate(count=Count('grade')).order_by('-count')
+    most_common_grade = grade_counts[0]['grade'] if grade_counts else 'N/A'
+
+    return {
+        'average': round(aggregate_data['avg'], 2),
+        'max': aggregate_data['high'],
+        'min': aggregate_data['low'],
+        'most_common_grade': most_common_grade
+    }
 
 
-def auto_post_marks(exam: Exam):
+def bulk_assign_grades_and_positions(exam: Exam):
     """
-    Auto-grades each mark, calculates position, total and average marks.
-    Should be run after teachers finish entering marks.
+    Assign grades and positions to all student scores for each subject in the exam.
     """
-    results = ExamResult.objects.filter(exam=exam)
+    subjects = exam.subjects.all()
+    institution = exam.institution
+
+    for exam_subject in ExamSubject.objects.filter(exam=exam, subject__in=subjects).select_related('subject'):
+        scores = StudentScore.objects.filter(exam_subject=exam_subject)
+        grade_map = {
+            score.id: get_grade_from_score(score.score, exam_subject.subject, institution)
+            for score in scores
+        }
+
+        StudentScore.objects.bulk_update(
+            [StudentScore(id=pk, grade=grade) for pk, grade in grade_map.items()],
+            ['grade']
+        )
+
+        # Calculate and update positions
+        position_map = calculate_position(scores)
+        StudentScore.objects.bulk_update(
+            [StudentScore(id=score.id, position=position_map.get(score.student_id)) for score in scores],
+            ['position']
+        )
+
+
+def normalize_score(raw_score: float, max_raw: float, target_max: int = 100) -> float:
+    """
+    Normalize a raw score to a scale out of target_max (e.g., 100).
+    """
+    if max_raw == 0:
+        return 0.0
+    return round((raw_score / max_raw) * target_max, 2)
+
+
+def get_student_exam_summary(student: Student, exam: Exam) -> dict:
+    """
+    Get detailed summary for a student's performance in an exam.
+    """
+    scores = StudentScore.objects.filter(
+        student=student,
+        exam_subject__exam=exam
+    ).select_related('exam_subject__subject')
+
+    total_score = 0
+    subjects = []
+
+    for score in scores:
+        subjects.append({
+            "subject": score.exam_subject.subject.name,
+            "score": score.score,
+            "grade": score.grade,
+            "position": score.position
+        })
+        total_score += score.score or 0
+
+    average = round(total_score / scores.count(), 2) if scores.exists() else 0
+
+    return {
+        "student": student.user.get_full_name(),
+        "exam": str(exam),
+        "total_score": total_score,
+        "average_score": average,
+        "subjects": subjects
+    }
+
+
+def generate_student_ranking(exam: Exam):
+    """
+    Rank students by average score and store in ExamResult.
+    """
+    results = ExamResult.objects.filter(exam=exam).order_by('-average_score')
+
+    rank = 1
+    prev_score = None
+    tied = 0
 
     for result in results:
-        if result.marks is not None:
-            result.grade = calculate_grade(result.marks)
-            result.save(update_fields=["grade"])
+        if result.average_score != prev_score:
+            rank += tied
+            tied = 1
+        else:
+            tied += 1
+        prev_score = result.average_score
+        result.overall_position = rank
+        result.save(update_fields=['overall_position'])
 
-    calculate_positions(exam)
-    calculate_total_and_average(exam)
 
-
-def generate_exam_predictions(student, subject=None):
+def generate_exam_slug(name: str, year: int = None, term: str = None) -> str:
     """
-    AI-powered exam performance prediction stub.
+    Generates a unique slug for an exam using its name, year, and term.
 
+    Example output: 'math-exam-term-1-2025'
     """
-    base_score = getattr(student, 'average_marks', None)
-    if base_score is None:
-        # Default baseline prediction if no average_marks available
-        base_score = 50
+    base = slugify(name)
+    parts = [base]
+    if term:
+        parts.append(slugify(term))
+    if year:
+        parts.append(str(year))
+    return '-'.join(parts)
 
-    # Add small random noise +/- 5 marks
-    predicted_score = base_score + random.uniform(-5, 5)
-    # Clamp between 0 and 100
-    predicted_score = max(0, min(100, predicted_score))
-
-    return round(predicted_score, 2)
-
-def generate_ai_exam(*args, **kwargs):
-    # TODO: implement this function later
-    pass
+def format_exam_label(subject: str, class_level: str, term: str, year: int) -> str:
+    """
+    Formats a human-readable exam label like:
+    'Mathematics - Grade 6 - Term 1 - 2025'
+    """
+    return f"{subject} - {class_level} - {term} - {year}"

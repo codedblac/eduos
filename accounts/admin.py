@@ -1,42 +1,59 @@
-# accounts/admin.py
-
 from django.contrib import admin
-from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from django.utils.translation import gettext_lazy as _
-from .models import CustomUser, Institution
+from django.utils.html import format_html
+from accounts.models import CustomUser, Institution
 
 
 @admin.register(Institution)
 class InstitutionAdmin(admin.ModelAdmin):
-    list_display = ('name', 'location', 'is_active', 'mpesa_paybill', 'theme_mode', 'created_at')
-    list_filter = ('is_active', 'theme_mode', 'created_at')
-    search_fields = ('name', 'location', 'mpesa_paybill', 'mpesa_shortcode')
-    readonly_fields = ('created_at',)
+    list_display = ("name", "is_active", "created_at")
+    list_filter = ("is_active",)
+    search_fields = ("name",)
+    ordering = ("-created_at",)
+    readonly_fields = ("created_at",)
+    fieldsets = (
+        (None, {"fields": ("name", "is_active")}),
+        ("Metadata", {"fields": ("created_at",)}),
+    )
 
 
-class CustomUserAdmin(BaseUserAdmin):
-    model = CustomUser
-    ordering = ('email',)
-    list_display = ('email', 'first_name', 'last_name', 'role', 'institution', 'is_active', 'is_staff', 'date_joined')
-    list_filter = ('role', 'institution', 'is_active', 'is_staff', 'is_superuser')
+@admin.register(CustomUser)
+class CustomUserAdmin(admin.ModelAdmin):
+    list_display = (
+        "email",
+        "full_name",
+        "role",
+        "institution",
+        "is_active",
+        "is_staff",
+        "last_login",
+        "last_login_ip",
+    )
+    list_filter = ("role", "is_active", "is_staff", "institution")
+    search_fields = ("email", "first_name", "last_name", "institution__name")
+    ordering = ("-date_joined",)
+    readonly_fields = ("date_joined", "last_updated", "last_login", "last_login_ip", "last_user_agent")
 
     fieldsets = (
-        (_('Account Info'), {'fields': ('email', 'password')}),
-        (_('Personal Info'), {'fields': ('first_name', 'last_name', 'phone')}),
-        (_('Institution Details'), {'fields': ('institution', 'role')}),
-        (_('Permissions'), {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
-        (_('Important Dates'), {'fields': ('last_login', 'date_joined')}),
+        ("Credentials", {
+            "fields": ("email", "password")
+        }),
+        ("Personal Info", {
+            "fields": ("first_name", "last_name", "phone")
+        }),
+        ("Institutional Info", {
+            "fields": ("role", "institution")
+        }),
+        ("Status", {
+            "fields": ("is_active", "is_staff", "is_superuser")
+        }),
+        ("Metadata", {
+            "fields": ("date_joined", "last_updated", "last_login", "last_login_ip", "last_user_agent")
+        }),
+        ("Permissions", {
+            "fields": ("groups", "user_permissions")
+        }),
     )
 
-    add_fieldsets = (
-        (None, {
-            'classes': ('wide',),
-            'fields': ('email', 'first_name', 'last_name', 'phone', 'institution', 'role', 'password1', 'password2', 'is_active', 'is_staff')}
-        ),
-    )
-
-    search_fields = ('email', 'first_name', 'last_name', 'phone')
-    readonly_fields = ('date_joined', 'last_login')
-
-
-admin.site.register(CustomUser, CustomUserAdmin)
+    def full_name(self, obj):
+        return f"{obj.first_name} {obj.last_name}"
+    full_name.short_description = "Full Name"

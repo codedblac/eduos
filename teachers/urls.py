@@ -1,12 +1,16 @@
-from django.urls import path
+# teachers/urls.py
+
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from .views import (
-    TeacherListCreateView,
-    TeacherRetrieveUpdateDestroyView,
-    TeacherTimetableUploadView,  # Import the new view
+    TeacherViewSet,
+    TeacherAnalyticsView,
 )
 
+router = DefaultRouter()
+router.register(r'teachers', TeacherViewSet, basename='teacher')
+
 urlpatterns = [
-    path('', TeacherListCreateView.as_view(), name='teacher-list-create'),
-    path('<int:pk>/', TeacherRetrieveUpdateDestroyView.as_view(), name='teacher-detail'),
-    path('<int:pk>/upload-timetable/', TeacherTimetableUploadView.as_view(), name='teacher-upload-timetable'),  # New endpoint
+    path('', include(router.urls)),
+    path('teachers/analytics/', TeacherAnalyticsView.as_view(), name='teacher-analytics'),
 ]

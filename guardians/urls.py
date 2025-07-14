@@ -1,12 +1,21 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import GuardianViewSet, GuardianStudentLinkViewSet, GuardianNotificationViewSet
+from .views import (
+    GuardianViewSet,
+    GuardianStudentLinkViewSet,
+    GuardianNotificationViewSet,
+    GuardianAnalyticsView
+)
 
 router = DefaultRouter()
-router.register('guardians', GuardianViewSet)
-router.register('student-links', GuardianStudentLinkViewSet)
-router.register('notifications', GuardianNotificationViewSet)
+router.register(r'', GuardianViewSet, basename='guardian')
+router.register(r'student-links', GuardianStudentLinkViewSet, basename='guardian-student-link')
+router.register(r'notifications', GuardianNotificationViewSet, basename='guardian-notification')
 
 urlpatterns = [
+    # ViewSet-based routes from router
     path('', include(router.urls)),
+
+    # Standalone analytics view
+    path('analytics/detail/', GuardianAnalyticsView.as_view(), name='guardian-analytics-detail'),
 ]

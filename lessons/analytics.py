@@ -1,51 +1,111 @@
-from lessons.models import LessonPlan, LessonSession, LessonSchedule
 from django.db.models import Count, Avg, Q
-from datetime import timedelta
 from django.utils import timezone
+from datetime import timedelta
+from .models import LessonPlan, LessonSchedule, LessonSession
+from subjects.models import Subject
+from institutions.models import Institution
 
 
-def get_teacher_workload(teacher):
+class LessonAnalytics:
     """
-    Returns the total number of lesson plans and sessions for a given teacher.
+    Central analytics engine for extracting insights from the lessons module.
     """
-    return {
-        "lesson_plans": LessonPlan.objects.filter(teacher=teacher).count(),
-        "lesson_sessions": LessonSession.objects.filter(recorded_by=teacher).count(),
-    }
 
+    @staticmethod
+    def coverage_summary_by_teacher(teacher_id, term_id=None):
+        plans = LessonPlan.objects.filter(teacher_id=teacher_id)
+        if term_id:
+            plans = plans.filter(term_id=term_id)
 
-def get_lesson_coverage_report(term):
-    """
-    Returns syllabus coverage percentage for all classes/subjects in a term.
-    """
-    report = []
-    plans = LessonPlan.objects.filter(term=term)
+        total = plans.count()
+        approved = plans.filter(is_approved=True).count()
+        delivered = LessonSession.objects.filter(
+            lesson_schedule__lesson_plan__in=plans,
+            coverage_status='covered'
+        ).count()
 
-    for plan in plans:
-        total = plan.schedules.count()
-        covered = plan.schedules.filter(session__coverage_status='covered').count()
-        percent = (covered / total) * 100 if total else 0
-        report.append({
-            "subject": plan.subject.name,
-            "class": plan.class_level.name,
-            "teacher": plan.teacher.username,
-            "coverage": round(percent, 1),
-        })
-    return report
+        return {
+            'total_plans': total,
+            'approved': approved,
+            'delivered_sessions': delivered,
+            'coverage_rate': round((delivered / total) * 100, 2) if total else 0
+        }
 
+    @staticmethod
+    def subject_wise_lesson_stats(subject_id, term_id=None):
+        plans = LessonPlan.objects.filter(subject_id=subject_id)
+        if term_id:
+            plans = plans.filter(term_id=term_id)
 
-def get_missed_lessons_stats():
-    """
-    Aggregate missed lessons per teacher and class.
-    """
-    missed = LessonSchedule.objects.filter(status='missed')
-    return missed.values('lesson_plan__teacher__username', 'lesson_plan__class_level__name') \
-        .annotate(total_missed=Count('id'))
+        sessions = LessonSession.objects.filter(lesson_schedule__lesson_plan__in=plans)
 
+        return {
+            'total_lesson_plans': plans.count(),
+            'sessions_held': sessions.count(),
+            'covered': sessions.filter(coverage_status='covered').count(),
+            'skipped': sessions.filter(coverage_status='skipped').count(),
+            'cancelled': sessions.filter(coverage_status='cancelled').count(),
+            'postponed': sessions.filter(coverage_status='postponed').count(),
+        }
 
-def get_average_lesson_duration():
-    """
-    Computes average lesson duration by teacher or subject.
-    """
-    return LessonPlan.objects.values('teacher__username', 'subject__name') \
-        .annotate(avg_duration=Avg('duration_minutes'))
+    @staticmethod
+    def delivery_trends(institution_id, recent_days=30):
+        start_date = timezone.now().date() - timedelta(days=recent_days)
+        sessions = LessonSession.objects.filter(
+            lesson_schedule__lesson_plan__institution_id=institution_id,
+            delivered_on__gte=start_date,
+            coverage_status='covered'
+        ).values('delivered_on').annotate(
+            total=Count('id')
+        ).order_by('delivered_on')
+
+        return list(sessions)
+
+    @staticmethod
+    def missed_or_skipped_alerts(class_level_id=None, term_id=None):
+        sessions = LessonSession.objects.filter(
+            coverage_status__in=['skipped', 'cancelled']
+        )
+
+        if class_level_id:
+            sessions = sessions.filter(lesson_schedule__lesson_plan__class_level_id=class_level_id)
+        if term_id:
+            sessions = sessions.filter(lesson_schedule__lesson_plan__term_id=term_id)
+
+        return sessions.values(
+            'lesson_schedule__lesson_plan__subject__name',
+            'lesson_schedule__lesson_plan__teacher__id'
+        ).annotate(
+            count=Count('id')
+        ).order_by('-count')
+
+    @staticmethod
+    def weekly_lesson_distribution(teacher_id):
+        """
+        Count of sessions delivered by a teacher per week in current term.
+        """
+        from django.db.models.functions import ExtractWeek
+
+        sessions = LessonSession.objects.filter(
+            lesson_schedule__lesson_plan__teacher_id=teacher_id,
+            coverage_status='covered'
+        ).annotate(
+            week=ExtractWeek('delivered_on')
+        ).values('week').annotate(
+            total=Count('id')
+        ).order_by('week')
+
+        return list(sessions)
+
+    @staticmethod
+    def lesson_plan_approval_stats(institution_id):
+        total = LessonPlan.objects.filter(institution_id=institution_id).count()
+        approved = LessonPlan.objects.filter(institution_id=institution_id, is_approved=True).count()
+        pending = total - approved
+
+        return {
+            "total_plans": total,
+            "approved": approved,
+            "pending": pending,
+            "approval_rate": round((approved / total) * 100, 2) if total else 0
+        }

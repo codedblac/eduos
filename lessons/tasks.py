@@ -1,54 +1,95 @@
+# lessons/tasks.py
+
 from celery import shared_task
 from django.utils import timezone
-from lessons.models import LessonSchedule, LessonSession
-from syllabus.models import SyllabusTopic
-from django.db.models import Q
-from datetime import timedelta
+from .models import LessonPlan, LessonSchedule, LessonSession
 from notifications.utils import notify_user
+from accounts.models import CustomUser
+from datetime import timedelta
+
+from .ai import LessonPlannerAI
 
 
 @shared_task
-def auto_mark_missed_lessons():
+def send_upcoming_lesson_notifications():
     """
-    Auto-mark lessons as 'missed' if their scheduled date/time has passed and no session was recorded.
+    Notify teachers about upcoming lessons scheduled for the next day.
     """
-    now = timezone.now()
-    missed = LessonSchedule.objects.filter(
-        scheduled_date__lt=now.date(),
-        session__isnull=True,
-        status='scheduled'
-    )
-    for lesson in missed:
-        lesson.status = 'missed'
-        lesson.save()
-        notify_user(lesson.lesson_plan.teacher, f"You missed a scheduled lesson on {lesson.scheduled_date}.")
+    tomorrow = timezone.now().date() + timedelta(days=1)
+    schedules = LessonSchedule.objects.filter(scheduled_date=tomorrow, status='scheduled')
+
+    for schedule in schedules:
+        teacher = schedule.lesson_plan.teacher
+        if teacher:
+            notify_user(
+                user=teacher,
+                title="Upcoming Lesson Reminder",
+                message=f"You have a lesson scheduled for {schedule.scheduled_date} at {schedule.scheduled_time}.",
+                source_app='lessons'
+            )
 
 
 @shared_task
-def weekly_syllabus_progress_alert():
+def flag_unreviewed_lessons():
     """
-    Weekly task to notify teachers if their syllabus progress is lagging.
+    Identify lesson sessions that are more than 3 days old and still not reviewed.
     """
-    now = timezone.now()
-    week_ago = now - timedelta(days=7)
-    teachers = set()
+    cutoff = timezone.now() - timedelta(days=3)
+    unreviewed = LessonSession.objects.filter(delivered_on__lte=cutoff.date(), is_reviewed=False)
 
-    for topic in SyllabusTopic.objects.all():
-        plans = topic.lessonplan_set.all()
-        for plan in plans:
-            total_sessions = plan.schedules.count()
-            delivered_sessions = plan.schedules.filter(session__isnull=False).count()
-            if total_sessions > 0 and delivered_sessions / total_sessions < 0.5:
-                teachers.add(plan.teacher)
+    for session in unreviewed:
+        notify_user(
+            user=session.recorded_by,
+            title="Unreviewed Lesson Alert",
+            message=f"Your lesson on {session.delivered_on} for {session.lesson_schedule.lesson_plan.subject.name} is still pending review.",
+            source_app='lessons'
+        )
+
+
+@shared_task
+def auto_generate_lesson_plan_suggestions():
+    """
+    Run AI suggestions across all teachers who haven't planned lessons for the current week.
+    """
+    today = timezone.now().date()
+    current_week = today.isocalendar()[1]
+
+    # Get all active teachers
+    teachers = CustomUser.objects.filter(is_teacher=True)
 
     for teacher in teachers:
-        notify_user(teacher, "Your lesson coverage this week is below 50%. Please review your plans.")
+        if not LessonPlan.objects.filter(
+            teacher=teacher,
+            week_number=current_week,
+            term__is_active=True
+        ).exists():
+            # Generate suggestions
+            suggestions = LessonPlannerAI.suggest_plans_for_teacher(teacher.id, current_week)
+            if suggestions:
+                notify_user(
+                    user=teacher,
+                    title="Lesson Planning Suggestions Ready",
+                    message="We've generated AI-based lesson suggestions for this week. Review and customize them in the planner.",
+                    source_app='lessons'
+                )
 
 
 @shared_task
-def suggest_next_week_lessons():
+def analyze_coverage_gaps():
     """
-    Suggest lesson plans for the upcoming week based on syllabus and past sessions.
+    Periodic check to analyze which classes or subjects are falling behind in lesson coverage.
+    Sends alerts to teachers/HODs.
     """
-    from .ai import generate_lesson_plan_suggestions
-    generate_lesson_plan_suggestions()
+    flagged = LessonPlannerAI.flag_low_coverage_subjects()
+
+    for entry in flagged:
+        teacher = entry.get("teacher")
+        subject = entry.get("subject")
+        class_level = entry.get("class_level")
+
+        notify_user(
+            user=teacher,
+            title="Lesson Coverage Alert",
+            message=f"Coverage is below expected for {subject.name} - {class_level.name}. Please review and update lesson sessions.",
+            source_app='lessons'
+        )

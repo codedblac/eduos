@@ -43,9 +43,11 @@ INSTALLED_APPS = [
     'channels',
     'import_export',
     'taggit',
+    'auditlog',
     
     
     # Local apps 
+    
     
     'accounts',
     'institutions',
@@ -88,6 +90,8 @@ INSTALLED_APPS = [
     'communication',
     'file_manager',
     'fee_management',
+    'e_wallet',
+    'access_control',
     
     
     

@@ -1,16 +1,18 @@
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from .views import (
-    StudentListCreateView,
-    StudentDetailView,  # updated to match views.py
-    MyChildrenView,
-    MyStreamStudentsView,
-    UpdateEnrollmentStatusView,
+    StudentViewSet,
+    MedicalFlagViewSet,
+    StudentAnalyticsDashboardView
 )
 
+router = DefaultRouter()
+router.register(r'students', StudentViewSet, basename='student')
+router.register(r'medical-flags', MedicalFlagViewSet, basename='medical-flag')
+
 urlpatterns = [
-    path('students/', StudentListCreateView.as_view(), name='student-list-create'),
-    path('students/<int:pk>/', StudentDetailView.as_view(), name='student-detail'),
-    path('my-children/', MyChildrenView.as_view(), name='my-children'),
-    path('my-stream-students/', MyStreamStudentsView.as_view(), name='my-stream-students'),
-    path('students/<int:pk>/update-status/', UpdateEnrollmentStatusView.as_view(), name='update-enrollment-status'),
+    path('', include(router.urls)),
+
+    # Analytics Dashboard
+    path('analytics/students/', StudentAnalyticsDashboardView.as_view(), name='student-analytics-dashboard'),
 ]

@@ -1,49 +1,65 @@
-from rest_framework import generics, permissions, status
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework.decorators import action
+from django.shortcuts import get_object_or_404
 from .models import Teacher
 from .serializers import TeacherSerializer
-from .permissions import IsSuperAdminOrInstitutionAdmin
+from .permissions import IsInstitutionAdminOrReadOnly
+from .analytics import TeacherAnalytics
+from rest_framework.parsers import MultiPartParser, FormParser
+from django.db.models import Q
 
 
-class TeacherListCreateView(generics.ListCreateAPIView):
+class TeacherViewSet(viewsets.ModelViewSet):
+    queryset = Teacher.objects.select_related('user', 'institution')
     serializer_class = TeacherSerializer
-    permission_classes = [permissions.IsAuthenticated, IsSuperAdminOrInstitutionAdmin]
+    parser_classes = [MultiPartParser, FormParser]
+    permission_classes = [permissions.IsAuthenticated, IsInstitutionAdminOrReadOnly]
 
     def get_queryset(self):
-        user = self.request.user
-        if user.is_superuser:
-            return Teacher.objects.all()
-        return Teacher.objects.filter(institution=user.institution)
+        institution = self.request.user.institution
+        return self.queryset.filter(institution=institution)
 
     def perform_create(self, serializer):
-        user = self.request.user
-        if not user.is_superuser:
-            serializer.save(institution=user.institution)
+        serializer.save(institution=self.request.user.institution)
+
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def me(self, request):
+        teacher = get_object_or_404(Teacher, user=request.user)
+        serializer = self.get_serializer(teacher)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def search(self, request):
+        query = request.query_params.get("q")
+        if query:
+            qs = self.get_queryset().filter(
+                Q(first_name__icontains=query) |
+                Q(last_name__icontains=query) |
+                Q(email__icontains=query)
+            )
         else:
-            serializer.save()
+            qs = self.get_queryset().none()
+        serializer = self.get_serializer(qs, many=True)
+        return Response(serializer.data)
 
-
-class TeacherRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
-    serializer_class = TeacherSerializer
-    permission_classes = [permissions.IsAuthenticated, IsSuperAdminOrInstitutionAdmin]
-    queryset = Teacher.objects.all()
-
-
-# ✅ NEW: Upload/Replace Teacher Timetable PDF
-class TeacherTimetableUploadView(generics.UpdateAPIView):
-    queryset = Teacher.objects.all()
-    serializer_class = TeacherSerializer
-    permission_classes = [permissions.IsAuthenticated, IsSuperAdminOrInstitutionAdmin]
-    parser_classes = [MultiPartParser, FormParser]
-
-    def patch(self, request, *args, **kwargs):
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    def upload_timetable(self, request, pk=None):
         teacher = self.get_object()
         timetable_pdf = request.FILES.get('timetable_pdf')
+        if timetable_pdf:
+            teacher.timetable_pdf = timetable_pdf
+            teacher.save(update_fields=['timetable_pdf'])
+            return Response({'status': 'Timetable uploaded'}, status=200)
+        return Response({'error': 'No file uploaded'}, status=400)
 
-        if not timetable_pdf:
-            return Response({'error': 'No timetable PDF uploaded.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        teacher.timetable_pdf = timetable_pdf
-        teacher.save()
-        return Response({'success': 'Timetable uploaded successfully.'})
+class TeacherAnalyticsView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsInstitutionAdminOrReadOnly]
+
+    def get(self, request, *args, **kwargs):
+        institution = request.user.institution
+        analytics = TeacherAnalytics(institution)
+        data = analytics.generate_summary()
+        return Response(data)

@@ -1,50 +1,75 @@
-from django.db.models.signals import post_save, pre_delete
+from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
-from .models import Assessment, AssessmentSession,  StudentAnswer
-from notifications.utils import send_notification_to_user
-from accounts.models import CustomUser
-
-
-@receiver(post_save, sender=Assessment)
-def notify_teachers_on_assessment_creation(sender, instance, created, **kwargs):
-    if created:
-        teachers = CustomUser.objects.filter(assigned_subjects=instance.subject)
-        for teacher in teachers:
-            send_notification_to_user(
-                user=teacher,
-                title="New Assessment Created",
-                message=f"A new assessment for {instance.subject.name} has been created."
-            )
+from .models import (
+    AssessmentSession,
+    AssessmentVisibility,
+    AssessmentLock,
+    StudentAnswer,
+    PerformanceTrend,
+)
+from django.utils import timezone
+from decimal import Decimal, ROUND_HALF_UP
 
 
 @receiver(post_save, sender=AssessmentSession)
-def notify_student_on_assessment_assigned(sender, instance, created, **kwargs):
+def create_visibility_for_session(sender, instance, created, **kwargs):
+    """
+    Automatically create an AssessmentVisibility record when a new session starts.
+    """
     if created:
-        send_notification_to_user(
-            user=instance.student,
-            title="New Assessment Assigned",
-            message=f"You have a new assessment: {instance.assessment.title}. Please complete it before {instance.assessment.due_date}."
+        AssessmentVisibility.objects.get_or_create(session=instance)
+
+
+@receiver(pre_save, sender=StudentAnswer)
+def prevent_edits_to_locked_assessments(sender, instance, **kwargs):
+    """
+    Prevent saving answers to locked assessments.
+    """
+    lock = getattr(instance.question.assessment, 'assessmentlock', None)
+    if lock and lock.locked:
+        raise ValueError("This assessment is locked and cannot be edited.")
+
+
+@receiver(post_save, sender=AssessmentSession)
+def update_performance_trend(sender, instance, created, **kwargs):
+    """
+    Update or create PerformanceTrend after a session is graded.
+    """
+    if not created and instance.is_graded and instance.score is not None:
+        from .models import Term  # Avoid circular import
+
+        trend, _ = PerformanceTrend.objects.get_or_create(
+            student=instance.student,
+            subject=instance.assessment.subject,
+            term=instance.assessment.term,
+            defaults={
+                "average_score": Decimal(instance.score).quantize(Decimal('.01'), rounding=ROUND_HALF_UP),
+                "assessment_count": 1,
+            }
         )
+        if not _:
+            # Update existing
+            total_score = (trend.average_score * trend.assessment_count) + instance.score
+            trend.assessment_count += 1
+            trend.average_score = Decimal(total_score / trend.assessment_count).quantize(Decimal('.01'), rounding=ROUND_HALF_UP)
+            trend.save()
 
 
 @receiver(post_save, sender=StudentAnswer)
-def auto_mark_mcq_answer(sender, instance, created, **kwargs):
-    if created and instance.question.type == 'mcq':
-        correct_answer = instance.question.answer_choices.filter(is_correct=True).first()
-        if correct_answer and instance.selected_choice == correct_answer:
-            instance.is_correct = True
-            instance.score = instance.question.max_score
+def auto_grade_mcq(sender, instance, created, **kwargs):
+    """
+    Automatically grade MCQs when saved.
+    """
+    if created and instance.question.type == 'mcq' and instance.selected_choice:
+        if instance.selected_choice.is_correct:
+            instance.marks_awarded = instance.question.marks
         else:
-            instance.is_correct = False
-            instance.score = 0
-        instance.save(update_fields=["is_correct", "score"])
+            instance.marks_awarded = 0
+        instance.auto_graded = True
+        instance.save(update_fields=['marks_awarded', 'auto_graded'])
 
 
-# @receiver(post_save, sender=AssessmentResult)
-# def notify_student_on_result_posted(sender, instance, created, **kwargs):
-#     if created:
-#         send_notification_to_user(
-#             user=instance.student,
-#             title="Assessment Results Available",
-#             message=f"Your results for {instance.assessment.title} are now available. Grade: {instance.grade}."
-#         )
+# Optional: Notify teacher or student via Celery or signal hooks
+# Example placeholder (extendable later)
+def notify_user(user, message):
+    print(f"[Notify] {user}: {message}")

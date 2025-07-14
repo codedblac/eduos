@@ -1,70 +1,90 @@
-# assessments/permissions.py
-
 from rest_framework import permissions
-
-class IsAdminOrReadOnly(permissions.BasePermission):
-    """
-    Allows full access to admins, read-only for others.
-    """
-
-    def has_permission(self, request, view):
-        if request.user.is_authenticated:
-            if request.user.is_superuser or getattr(request.user, 'is_admin', False):
-                return True
-            return request.method in permissions.SAFE_METHODS
-        return False
+from .models import AssessmentLock, AssessmentSession, AssessmentVisibility
 
 
 class IsTeacherOrAdmin(permissions.BasePermission):
     """
-    Allows access to teachers and admins.
+    Allow only teachers or staff/admin users.
     """
-
     def has_permission(self, request, view):
-        if request.user.is_authenticated:
-            return (
-                getattr(request.user, 'is_teacher', False) or
-                getattr(request.user, 'is_admin', False) or
-                request.user.is_superuser
-            )
-        return False
+        return request.user.is_authenticated and (
+            request.user.is_staff or getattr(request.user, 'is_teacher', False)
+        )
 
 
-class IsOwnerOrAdmin(permissions.BasePermission):
+class IsStudent(permissions.BasePermission):
     """
-    Allows access only to owners of an object or admins.
+    Allow only students.
     """
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and getattr(request.user, 'is_student', False)
 
+
+class CanSubmitAssessment(permissions.BasePermission):
+    """
+    Student can only submit if the assessment is not locked.
+    """
     def has_object_permission(self, request, view, obj):
-        if request.user.is_superuser or getattr(request.user, 'is_admin', False):
-            return True
-        return obj.user == request.user  # assumes `user` is the owner field
-
-
-class IsStudentViewingOwn(permissions.BasePermission):
-    """
-    Students can only view their own assessment records.
-    """
-
-    def has_object_permission(self, request, view, obj):
-        if request.user.is_authenticated and getattr(request.user, 'is_student', False):
-            return obj.student.user == request.user
-        return False
-
-
-class IsTeacherOfClassOrAdmin(permissions.BasePermission):
-    """
-    Used in assessments to restrict teachers to only their class/subject assessments.
-    """
-
-    def has_object_permission(self, request, view, obj):
-        user = request.user
-        if user.is_superuser or getattr(user, 'is_admin', False):
+        if not isinstance(obj, AssessmentSession):
+            return False
+        try:
+            lock = AssessmentLock.objects.get(assessment=obj.assessment)
+            return not lock.locked
+        except AssessmentLock.DoesNotExist:
             return True
 
-        # If the object has a `created_by` or `teacher` field
-        if hasattr(obj, 'teacher'):
-            return obj.teacher == user
-        if hasattr(obj, 'created_by'):
-            return obj.created_by == user
+
+class CanGradeAssessment(permissions.BasePermission):
+    """
+    Only teachers/staff can grade, and assessment must not be locked.
+    """
+    def has_object_permission(self, request, view, obj):
+        if not request.user.is_authenticated:
+            return False
+        if not (request.user.is_staff or getattr(request.user, 'is_teacher', False)):
+            return False
+        try:
+            lock = AssessmentLock.objects.get(assessment=obj.assessment)
+            return not lock.locked
+        except AssessmentLock.DoesNotExist:
+            return True
+
+
+class CanViewFeedback(permissions.BasePermission):
+    """
+    Students can only view feedback if visibility is allowed.
+    """
+    def has_object_permission(self, request, view, obj):
+        if not isinstance(obj, AssessmentSession):
+            return False
+        try:
+            visibility = AssessmentVisibility.objects.get(session=obj)
+            return visibility.can_view_feedback
+        except AssessmentVisibility.DoesNotExist:
+            return False
+
+
+class CanViewScore(permissions.BasePermission):
+    """
+    Students can only view their score if visibility is allowed.
+    """
+    def has_object_permission(self, request, view, obj):
+        if not isinstance(obj, AssessmentSession):
+            return False
+        try:
+            visibility = AssessmentVisibility.objects.get(session=obj)
+            return visibility.can_view_score
+        except AssessmentVisibility.DoesNotExist:
+            return False
+
+
+class IsOwnerOrTeacher(permissions.BasePermission):
+    """
+    Object-level permission to only allow owners (students) or teachers to view/edit it.
+    """
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_staff or getattr(request.user, 'is_teacher', False):
+            return True
+        if hasattr(obj, 'student') and obj.student.user == request.user:
+            return True
         return False

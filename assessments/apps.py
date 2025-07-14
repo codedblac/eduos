@@ -9,4 +9,4 @@ class AssessmentsConfig(AppConfig):
     verbose_name = "Assessments and Exams"
 
     def ready(self):
-        import assessments.signals  # Ensure signals are registered
+        import assessments.signals  
