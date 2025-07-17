@@ -47,7 +47,7 @@ class Subject(models.Model):
 
 class SubjectClassLevel(models.Model):
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name='class_levels')
-    class_level = models.ForeignKey(ClassLevel, on_delete=models.CASCADE, related_name='subjects')
+    class_level = models.ForeignKey(ClassLevel, on_delete=models.CASCADE, related_name='subject_links')
     compulsory = models.BooleanField(default=False)
 
     class Meta:

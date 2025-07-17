@@ -1,89 +1,281 @@
 from rest_framework import serializers
-from .models import Department, DepartmentUser, Subject, DepartmentAnnouncement, DepartmentLeaveApproval, DepartmentPerformanceNote
-from accounts.serializers import UserSummarySerializer
-from institutions.serializers import InstitutionBasicSerializer
+from accounts.serializers import UserSerializer
+from institutions.serializers import InstitutionSerializer
+from classes.serializers import ClassLevelSerializer
+from academics.serializers import TermSerializer, AcademicYearSerializer
+from students.serializers import StudentSerializer
+from .models import (
+    Department, DepartmentUser, DepartmentRoleAssignmentHistory,
+    Subject, DepartmentAnnouncement, DepartmentPerformanceNote,
+    DepartmentLeaveApproval, DepartmentMeeting, DepartmentKPI,
+    DepartmentBudget, DepartmentResource, DepartmentAuditLog,
+    DepartmentDocument, DepartmentGoal, DepartmentAnnualPlan,
+    DepartmentTask, DepartmentAnalyticsSnapshot
+)
+
+
+
 
 
 class DepartmentSerializer(serializers.ModelSerializer):
-    institution = InstitutionBasicSerializer(read_only=True)
+    institution = InstitutionSerializer(read_only=True)
+    parent_department = serializers.StringRelatedField(read_only=True)
 
     class Meta:
         model = Department
         fields = '__all__'
-
-
-class DepartmentCreateUpdateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Department
-        fields = ['name', 'code', 'institution', 'description', 'is_academic', 'type']
 
 
 class DepartmentUserSerializer(serializers.ModelSerializer):
-    user = UserSummarySerializer(read_only=True)
-    department = DepartmentSerializer(read_only=True)
+    user = UserSerializer(read_only=True)
+    department = serializers.StringRelatedField(read_only=True)
 
     class Meta:
         model = DepartmentUser
         fields = '__all__'
 
 
-class DepartmentUserCreateUpdateSerializer(serializers.ModelSerializer):
+class DepartmentRoleAssignmentHistorySerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+    department = serializers.StringRelatedField(read_only=True)
+
     class Meta:
-        model = DepartmentUser
-        fields = ['user', 'department', 'role', 'is_active']
+        model = DepartmentRoleAssignmentHistory
+        fields = '__all__'
 
 
 class SubjectSerializer(serializers.ModelSerializer):
-    department = DepartmentSerializer(read_only=True)
-    assigned_teacher = UserSummarySerializer(read_only=True)
+    department = serializers.StringRelatedField(read_only=True)
+    assigned_teacher = UserSerializer(read_only=True)
+    class_levels = ClassLevelSerializer(read_only=True, many=True)
 
     class Meta:
         model = Subject
         fields = '__all__'
-
-
-class SubjectCreateUpdateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Subject
-        fields = ['name', 'code', 'department', 'assigned_teacher', 'description',
-                  'is_examable', 'is_mapped_to_timetable', 'is_linked_to_elearning']
 
 
 class DepartmentAnnouncementSerializer(serializers.ModelSerializer):
-    created_by = UserSummarySerializer(read_only=True)
-    department = DepartmentSerializer(read_only=True)
+    department = serializers.StringRelatedField(read_only=True)
+    created_by = UserSerializer(read_only=True)
+    term = TermSerializer(read_only=True)
+    academic_year = AcademicYearSerializer(read_only=True)
 
     class Meta:
         model = DepartmentAnnouncement
         fields = '__all__'
 
 
-class DepartmentAnnouncementCreateSerializer(serializers.ModelSerializer):
+class DepartmentPerformanceNoteSerializer(serializers.ModelSerializer):
+    department = serializers.StringRelatedField(read_only=True)
+    student = StudentSerializer(read_only=True)
+    created_by = UserSerializer(read_only=True)
+    approved_by = UserSerializer(read_only=True)
+    term = TermSerializer(read_only=True)
+
     class Meta:
-        model = DepartmentAnnouncement
-        fields = ['title', 'message', 'department']
+        model = DepartmentPerformanceNote
+        fields = '__all__'
 
 
 class DepartmentLeaveApprovalSerializer(serializers.ModelSerializer):
-    approved_by = UserSummarySerializer(read_only=True)
-    staff = UserSummarySerializer(read_only=True)
-    department = DepartmentSerializer(read_only=True)
+    department = serializers.StringRelatedField(read_only=True)
+    staff_member = UserSerializer(read_only=True)
+    approved_by = UserSerializer(read_only=True)
 
     class Meta:
         model = DepartmentLeaveApproval
         fields = '__all__'
 
 
-class DepartmentPerformanceNoteSerializer(serializers.ModelSerializer):
-    created_by = UserSummarySerializer(read_only=True)
-    subject = SubjectSerializer(read_only=True)
+class DepartmentMeetingSerializer(serializers.ModelSerializer):
+    department = serializers.StringRelatedField(read_only=True)
+    conducted_by = UserSerializer(read_only=True)
 
     class Meta:
-        model = DepartmentPerformanceNote
+        model = DepartmentMeeting
         fields = '__all__'
 
 
+class DepartmentKPISerializer(serializers.ModelSerializer):
+    department = serializers.StringRelatedField(read_only=True)
+    term = TermSerializer(read_only=True)
+    reviewed_by = UserSerializer(read_only=True)
+
+    class Meta:
+        model = DepartmentKPI
+        fields = '__all__'
+
+
+class DepartmentBudgetSerializer(serializers.ModelSerializer):
+    department = serializers.StringRelatedField(read_only=True)
+
+    class Meta:
+        model = DepartmentBudget
+        fields = '__all__'
+
+
+class DepartmentResourceSerializer(serializers.ModelSerializer):
+    department = serializers.StringRelatedField(read_only=True)
+
+    class Meta:
+        model = DepartmentResource
+        fields = '__all__'
+
+
+class DepartmentAuditLogSerializer(serializers.ModelSerializer):
+    department = serializers.StringRelatedField(read_only=True)
+    actor = UserSerializer(read_only=True)
+
+    class Meta:
+        model = DepartmentAuditLog
+        fields = '__all__'
+
+
+class DepartmentDocumentSerializer(serializers.ModelSerializer):
+    department = serializers.StringRelatedField(read_only=True)
+    uploaded_by = UserSerializer(read_only=True)
+
+    class Meta:
+        model = DepartmentDocument
+        fields = '__all__'
+
+
+class DepartmentGoalSerializer(serializers.ModelSerializer):
+    department = serializers.StringRelatedField(read_only=True)
+
+    class Meta:
+        model = DepartmentGoal
+        fields = '__all__'
+
+
+class DepartmentAnnualPlanSerializer(serializers.ModelSerializer):
+    department = serializers.StringRelatedField(read_only=True)
+    reviewed_by = UserSerializer(read_only=True)
+
+    class Meta:
+        model = DepartmentAnnualPlan
+        fields = '__all__'
+
+
+class DepartmentTaskSerializer(serializers.ModelSerializer):
+    department = serializers.StringRelatedField(read_only=True)
+    assigned_to = UserSerializer(read_only=True)
+
+    class Meta:
+        model = DepartmentTask
+        fields = '__all__'
+
+
+class DepartmentAnalyticsSnapshotSerializer(serializers.ModelSerializer):
+    department = serializers.StringRelatedField(read_only=True)
+    term = TermSerializer(read_only=True)
+
+    class Meta:
+        model = DepartmentAnalyticsSnapshot
+        fields = '__all__'
+
+
+
+
+
+
+
+
+
+
+# --- Department ---
+class DepartmentCreateUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Department
+        fields = [
+            'name', 'code', 'description', 'institution', 'head',
+            'is_active', 'is_deleted'
+        ]
+
+
+# --- DepartmentUser ---
+class DepartmentUserCreateUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DepartmentUser
+        fields = [
+            'user', 'department', 'role', 'is_active'
+        ]
+
+
+# --- Subject ---
+class SubjectCreateUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Subject
+        fields = [
+            'name', 'code', 'description', 'department',
+            'assigned_teacher', 'is_examable'
+        ]
+
+
+# --- DepartmentAnnouncement ---
+class DepartmentAnnouncementCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DepartmentAnnouncement
+        fields = [
+            'title', 'message', 'department', 'created_by',
+            'created_at', 'is_published'
+        ]
+
+
+# --- DepartmentLeaveApproval ---
+class DepartmentLeaveApprovalCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DepartmentLeaveApproval
+        fields = [
+            'staff_member', 'department', 'start_date',
+            'end_date', 'reason', 'status', 'reviewed_by', 'reviewed_at'
+        ]
+
+
+# --- DepartmentPerformanceNote ---
 class DepartmentPerformanceNoteCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = DepartmentPerformanceNote
-        fields = ['subject', 'note']
+        fields = [
+            'student', 'department', 'note', 'created_by', 'created_at'
+        ]
+
+
+# --- DepartmentBudget ---
+class DepartmentBudgetCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DepartmentBudget
+        fields = [
+            'department', 'term', 'allocated_amount',
+            'spent_amount', 'approved_by', 'approval_date'
+        ]
+
+
+# --- DepartmentKPI ---
+class DepartmentKPICreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DepartmentKPI
+        fields = [
+            'department', 'term', 'name', 'target_value',
+            'achieved_value', 'remarks'
+        ]
+
+
+# --- DepartmentMeeting ---
+class DepartmentMeetingCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DepartmentMeeting
+        fields = [
+            'department', 'title', 'agenda', 'meeting_date',
+            'conducted_by', 'minutes'
+        ]
+
+
+# --- DepartmentResource ---
+class DepartmentResourceCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DepartmentResource
+        fields = [
+            'department', 'title', 'description', 'file',
+            'uploaded_by', 'uploaded_at'
+        ]

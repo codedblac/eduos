@@ -26,19 +26,22 @@ router.register(r'test-cases', views.CodeTestCaseViewSet)
 urlpatterns = [
     path('', include(router.urls)),
 
-    # 🔐 Lock/Publish actions
+    #  Lock/Publish actions
     path('assessments/<int:pk>/lock/', views.lock_assessment, name='assessment-lock'),
     path('assessments/<int:pk>/publish/', views.publish_assessment, name='assessment-publish'),
 
-    # 📊 Analytics
+    #  Analytics
     path('analytics/overall-summary/', views.overall_performance_summary_view, name='analytics-overall-summary'),
     path('analytics/student-trend/<int:student_id>/', views.student_performance_trend_view, name='analytics-student-trend'),
     path('analytics/topic-coverage/<int:subject_id>/', views.subject_coverage_analysis_view, name='analytics-topic-coverage'),
     path('analytics/inconsistencies/', views.flagged_students_view, name='analytics-inconsistencies'),
     path('analytics/heatmap/<int:student_id>/', views.topic_mastery_heatmap_view, name='analytics-heatmap'),
     path('analytics/participation/<int:assessment_id>/', views.assessment_participation_rate_view, name='analytics-participation'),
+    path('analytics/type-distribution/', views.assessment_type_distribution_view, name='analytics-type-distribution'),
+    path('analytics/top-performers/', views.top_performing_students_view, name='analytics-top-performers'),
+    path('analytics/difficulty-ranking/', views.subject_difficulty_ranking_view, name='analytics-difficulty-ranking'),
 
-    # 🤖 AI endpoints
+    #  AI endpoints
     path('ai/adaptive/<int:student_id>/<int:subject_id>/<int:class_level_id>/<int:term_id>/', views.generate_adaptive_assessment_view, name='ai-generate-adaptive'),
     path('ai/predict-score/<int:student_id>/<int:subject_id>/', views.predict_student_score_view, name='ai-predict-score'),
     path('ai/remedial/<int:student_id>/<int:subject_id>/', views.recommend_remedial_assessment_view, name='ai-remedial'),

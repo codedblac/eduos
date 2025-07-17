@@ -4,6 +4,7 @@ from channels.db import database_sync_to_async
 from django.contrib.auth import get_user_model
 from .models import ChatRoom, ChatMessage
 from .tasks import notify_new_message
+from .signals import notify_new_message as signal_notify_new_message  # NEW
 from .presence import mark_user_online, mark_user_offline  # NEW
 
 User = get_user_model()

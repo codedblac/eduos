@@ -2,7 +2,7 @@ from django.db.models.signals import post_save, pre_delete
 from django.dispatch import receiver
 from .models import LessonPlan, LessonSession
 from notifications.utils import notify_user
-from .ai import LessonAI  # Updated import
+from .ai import LessonAI  
 
 
 @receiver(post_save, sender=LessonPlan)

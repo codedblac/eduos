@@ -1,6 +1,7 @@
 from datetime import timedelta
 from django.db.models import Sum, F
 from django.utils import timezone
+
 from finance.models import (
     Income, Expense, Refund, Waiver,
     StudentFinanceSnapshot, Budget, WalletTransaction
@@ -20,7 +21,7 @@ class FinanceAnalytics:
 
     def income_expense_summary(self):
         """
-        Returns total income, expense, and net balance for the selected term.
+        Returns total income, total expense, and net balance for the selected budget scope.
         """
         income_total = Income.objects.filter(
             budget__institution=self.institution,
@@ -42,12 +43,12 @@ class FinanceAnalytics:
 
     def refund_stats(self):
         """
-        Returns total refund requested and approved within the academic year.
+        Returns total refunds requested and approved within the academic year.
         """
         refunds = Refund.objects.filter(student__institution=self.institution)
 
         if self.academic_year:
-            refunds = refunds.filter(requested_on__year=self.academic_year.year)
+            refunds = refunds.filter(academic_year=self.academic_year)
 
         total_requested = refunds.aggregate(total=Sum('amount'))['total'] or 0
         total_approved = refunds.filter(status='approved').aggregate(total=Sum('amount'))['total'] or 0
@@ -59,7 +60,7 @@ class FinanceAnalytics:
 
     def waiver_distribution(self):
         """
-        Returns total waiver amount grouped by term name for current academic year.
+        Returns waiver totals grouped by term name within the selected academic year.
         """
         waivers = Waiver.objects.filter(
             student__institution=self.institution,
@@ -79,17 +80,17 @@ class FinanceAnalytics:
 
     def fee_collection_progress(self):
         """
-        Calculates overall collection progress for the term.
+        Returns collected vs expected fee summary and collection rate percentage.
         """
         qs = StudentFinanceSnapshot.objects.filter(
             student__institution=self.institution,
             academic_year=self.academic_year,
             term=self.term
         )
+
         total_paid = qs.aggregate(total=Sum('total_paid'))['total'] or 0
         total_invoiced = qs.aggregate(total=Sum('total_invoiced'))['total'] or 0
-
-        collection_rate = (total_paid / total_invoiced) * 100 if total_invoiced > 0 else 0.0
+        collection_rate = (total_paid / total_invoiced * 100) if total_invoiced > 0 else 0.0
 
         return {
             "collected": float(total_paid),
@@ -99,7 +100,7 @@ class FinanceAnalytics:
 
     def wallet_transactions_summary(self):
         """
-        Returns summary of wallet credits, debits, and net balance.
+        Summarizes student wallet activity — credits, debits, and net wallet balance.
         """
         qs = WalletTransaction.objects.filter(wallet__student__institution=self.institution)
 
@@ -125,16 +126,16 @@ class FinanceAnalytics:
 
         return [
             {
-                "student_id": s.student.id,
-                "name": s.student.full_name,
-                "balance": float(s.balance)
+                "student_id": snapshot.student.id,
+                "name": snapshot.student.full_name,
+                "balance": float(snapshot.balance)
             }
-            for s in qs
+            for snapshot in qs
         ]
 
     def daily_collections_chart(self, days=30):
         """
-        Returns a list of daily income totals for past X days for line chart plotting.
+        Returns total daily income received over the past X days for plotting.
         """
         today = timezone.now().date()
         start_date = today - timedelta(days=days)

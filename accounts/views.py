@@ -19,7 +19,7 @@ from accounts.serializers import (
     UserMinimalSerializer,
     PublicUserSignupSerializer,
     ChangePasswordSerializer,
-    PasswordResetRequestSerializer,  # ✅ Fixed
+    PasswordResetRequestSerializer,  
     PasswordResetConfirmSerializer,
 )
 from accounts.permissions import (
@@ -32,18 +32,18 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 User = get_user_model()
 
-# ==============================
-# 📥 Public Registration
-# ==============================
+
+#  Public Registration
+
 
 class RegisterView(generics.CreateAPIView):
     serializer_class = PublicUserSignupSerializer
     permission_classes = [permissions.AllowAny]
 
 
-# ==============================
-# 🔐 Login (Token-based)
-# ==============================
+
+#  Login (Token-based)
+
 
 class CustomLoginView(ObtainAuthToken):
     def post(self, request, *args, **kwargs):
@@ -56,9 +56,9 @@ class CustomLoginView(ObtainAuthToken):
         })
 
 
-# ==============================
-# 👥 User Management
-# ==============================
+
+#  User Management
+
 
 class UserListCreateView(generics.ListCreateAPIView):
     queryset = CustomUser.objects.select_related("institution").all()
@@ -102,9 +102,9 @@ class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
         return CustomUser.objects.none()
 
 
-# ==============================
-# 👤 Profile (Me)
-# ==============================
+
+#  Profile (Me)
+
 
 class MeView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -120,9 +120,9 @@ class MeView(views.APIView):
         return Response(serializer.data)
 
 
-# ==============================
-# 🔄 Account Switcher
-# ==============================
+
+#  Account Switcher
+
 
 class SwitchAccountView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -137,9 +137,9 @@ class SwitchAccountView(views.APIView):
         return Response(UserMinimalSerializer(target_user).data)
 
 
-# ==============================
-# 🧑‍🏫 Role Listing
-# ==============================
+
+#  Role Listing
+
 
 class UserRolesView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -149,9 +149,9 @@ class UserRolesView(views.APIView):
         return Response(roles)
 
 
-# ==============================
-# 🔒 Change Password
-# ==============================
+
+#  Change Password
+
 
 class ChangePasswordView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -165,9 +165,9 @@ class ChangePasswordView(views.APIView):
         return Response({"detail": "Password changed successfully."})
 
 
-# ==============================
-# 🔐 Forgot Password (Reset Request)
-# ==============================
+
+#  Forgot Password (Reset Request)
+
 
 class ForgotPasswordView(views.APIView):
     permission_classes = [permissions.AllowAny]
@@ -191,9 +191,9 @@ class ForgotPasswordView(views.APIView):
         return Response({"detail": "Reset email sent."})
 
 
-# ==============================
-# 🔐 Password Reset Confirm
-# ==============================
+
+#  Password Reset Confirm
+
 
 class PasswordResetConfirmView(views.APIView):
     permission_classes = [permissions.AllowAny]

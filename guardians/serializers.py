@@ -1,93 +1,73 @@
 from rest_framework import serializers
-from .models import Guardian, GuardianStudentLink, GuardianNotification
+from django.contrib.contenttypes.models import ContentType
+from .models import (
+    Guardian,
+    GuardianStudentLink,
+    GuardianNotification
+)
+from accounts.serializers import UserSerializer
+from students.serializers import StudentSerializer
+from institutions.serializers import InstitutionSerializer
 from students.models import Student
-from accounts.serializers import UserMiniSerializer  # Mini user serializer (already assumed)
 
-# ✅ Guardian Serializer (Read-Only View)
+
 class GuardianSerializer(serializers.ModelSerializer):
-    user = UserMiniSerializer(read_only=True)
+    user = UserSerializer(read_only=True)
+    institution = InstitutionSerializer(read_only=True)
+    student_ids = serializers.SerializerMethodField()
 
     class Meta:
         model = Guardian
         fields = [
-            'id',
-            'user',
-            'institution',
-            'phone_number',
-            'email',
-            'id_number',
-            'occupation',
-            'address',
-            'is_active',
-            'created_at',
-            'updated_at',
+            'id', 'user', 'institution', 'phone_number', 'email', 'id_number',
+            'occupation', 'address', 'profile_photo', 'preferred_language',
+            'notification_preferences', 'is_active', 'is_deleted',
+            'created_at', 'updated_at', 'student_ids'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
+    def get_student_ids(self, obj):
+        return [link.student.id for link in obj.student_links.all()]
 
-# ✅ Guardian Creation / Update Serializer (Write-Only)
+
 class GuardianCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Guardian
         fields = [
-            'user',
-            'institution',
-            'phone_number',
-            'email',
-            'id_number',
-            'occupation',
-            'address',
-            'is_active',
+            'user', 'institution', 'phone_number', 'email', 'id_number',
+            'occupation', 'address', 'profile_photo', 'preferred_language',
+            'notification_preferences'
         ]
 
 
-# ✅ GuardianStudentLink Full Serializer (Readable View)
 class GuardianStudentLinkSerializer(serializers.ModelSerializer):
     guardian = GuardianSerializer(read_only=True)
-    student = serializers.PrimaryKeyRelatedField(queryset=Student.objects.all())
+    student = StudentSerializer(read_only=True)
+    student_id = serializers.PrimaryKeyRelatedField(queryset=Student.objects.all(), write_only=True, source='student')
 
     class Meta:
         model = GuardianStudentLink
         fields = [
-            'id',
-            'guardian',
-            'student',
-            'relationship',
-            'is_primary',
-            'created_at',
-            'updated_at',
+            'id', 'guardian', 'student', 'student_id', 'relationship', 'is_primary',
+            'verified_by_school', 'notes', 'start_date', 'end_date', 'is_deleted',
+            'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
-# ✅ GuardianStudentLink Create/Update Serializer
-class GuardianStudentLinkCreateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = GuardianStudentLink
-        fields = [
-            'guardian',
-            'student',
-            'relationship',
-            'is_primary',
-        ]
-
-
-# ✅ Guardian Notification Serializer (Fully Readable)
 class GuardianNotificationSerializer(serializers.ModelSerializer):
     guardian = GuardianSerializer(read_only=True)
+    institution = InstitutionSerializer(read_only=True)
+    content_type = serializers.SlugRelatedField(
+        slug_field='model', queryset=ContentType.objects.all(), required=False
+    )
+    object_id = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = GuardianNotification
         fields = [
-            'id',
-            'guardian',
-            'institution',
-            'title',
-            'message',
-            'type',
-            'related_object_type',
-            'related_object_id',
-            'is_read',
-            'timestamp',
+            'id', 'guardian', 'institution', 'title', 'message', 'type',
+            'priority', 'delivered_via', 'content_type', 'object_id',
+            'is_read', 'read_at', 'scheduled_for', 'timestamp', 'is_deleted'
         ]
-        read_only_fields = ['id', 'timestamp', 'guardian']
+        read_only_fields = ['id', 'timestamp', 'read_at']

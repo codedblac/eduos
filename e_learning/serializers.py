@@ -5,7 +5,13 @@ from .models import (
     Assignment, AssignmentSubmission,
     Quiz, QuizQuestion, QuizSubmission,
     CourseAnnouncement, Message, MessageThread,
-    StudentLessonProgress, TeacherActivityLog, AIPredictedScore
+    StudentLessonProgress, TeacherActivityLog, AIPredictedScore,
+    InstructorProfile, CourseTag, CourseCertificate, CourseReview, LessonDiscussion
+)
+from .models import (
+    Badge, StudentBadge, CourseMetadata,
+    LessonDownloadLog, CourseTranslation, PlagiarismReport,
+    CourseCompletion
 )
 
 # ------------------------------
@@ -29,6 +35,7 @@ class CourseChapterSerializer(serializers.ModelSerializer):
 class CourseSerializer(serializers.ModelSerializer):
     chapters = CourseChapterSerializer(many=True, read_only=True)
     subject_name = serializers.CharField(source='subject.name', read_only=True)
+    tags = serializers.SlugRelatedField(many=True, read_only=True, slug_field='name')
 
     class Meta:
         model = Course
@@ -178,4 +185,83 @@ class AIPredictedScoreSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AIPredictedScore
+        fields = '__all__'
+
+
+# ------------------------------
+# Extras
+# ------------------------------
+
+class InstructorProfileSerializer(serializers.ModelSerializer):
+    user_name = serializers.CharField(source='user.full_name', read_only=True)
+
+    class Meta:
+        model = InstructorProfile
+        fields = '__all__'
+
+
+class CourseTagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CourseTag
+        fields = '__all__'
+
+
+class CourseCertificateSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source='student.full_name', read_only=True)
+    course_title = serializers.CharField(source='course.title', read_only=True)
+
+    class Meta:
+        model = CourseCertificate
+        fields = '__all__'
+
+
+class CourseReviewSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source='student.full_name', read_only=True)
+
+    class Meta:
+        model = CourseReview
+        fields = '__all__'
+
+
+class LessonDiscussionSerializer(serializers.ModelSerializer):
+    user_name = serializers.CharField(source='user.full_name', read_only=True)
+    lesson_title = serializers.CharField(source='lesson.title', read_only=True)
+
+    class Meta:
+        model = LessonDiscussion
+        fields = '__all__'
+
+class BadgeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Badge
+        fields = '__all__'
+
+class StudentBadgeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StudentBadge
+        fields = '__all__'
+
+class CourseMetadataSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CourseMetadata
+        fields = '__all__'
+
+class LessonDownloadLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LessonDownloadLog
+        fields = '__all__'
+
+class CourseTranslationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CourseTranslation
+        fields = '__all__'
+
+class PlagiarismReportSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PlagiarismReport
+        fields = '__all__'
+
+class CourseCompletionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CourseCompletion
         fields = '__all__'

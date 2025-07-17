@@ -3,56 +3,108 @@ from rest_framework import permissions
 
 class IsInstitutionUploaderOrReadOnly(permissions.BasePermission):
     """
-    Allow safe methods for all, but editing/deleting only for the original uploader or super admins.
+    SAFE methods allowed for:
+        - Public resources
+        - Users from same institution (if visibility allows)
+    WRITE/DELETE only allowed for:
+        - Original uploader
+        - Institution admins or super admins
     """
 
     def has_object_permission(self, request, view, obj):
+        user = request.user
         if request.method in permissions.SAFE_METHODS:
-            # Public read access depending on visibility
             if obj.visibility == 'public':
                 return True
-            if request.user.is_authenticated and hasattr(request.user, 'profile'):
-                return obj.institution == request.user.profile.institution
+            if user.is_authenticated and hasattr(user, 'profile'):
+                return obj.institution == user.profile.institution
             return False
 
-        # Write access
-        if not request.user.is_authenticated:
+        if not user.is_authenticated or not hasattr(user, 'profile'):
             return False
 
-        # Uploader or super admin (e.g., school head)
-        return obj.uploader == request.user.profile or request.user.profile.role in ['admin', 'super_admin']
+        return (
+            obj.uploader == user
+            or user.profile.role in ['admin', 'super_admin']
+            or (hasattr(user, 'institution') and user.institution == obj.institution)
+        )
 
 
 class IsSchoolTeacherOrAdmin(permissions.BasePermission):
     """
-    Allows only authenticated institution teachers or admins to upload resources.
+    Grants access to users who are 'teacher', 'admin', or 'super_admin'.
+    Useful for upload endpoints.
     """
 
     def has_permission(self, request, view):
         user = request.user
-        if not user.is_authenticated or not hasattr(user, 'profile'):
-            return False
-        return user.profile.role in ['teacher', 'admin', 'super_admin']
+        return (
+            user.is_authenticated
+            and hasattr(user, 'profile')
+            and user.profile.role in ['teacher', 'admin', 'super_admin']
+        )
 
 
 class IsAIOrAdmin(permissions.BasePermission):
     """
-    Used internally by the AI engine to allow updates (e.g., auto tagging or summaries).
-    Only admins and trusted AI systems can use this.
+    Used internally by the AI engine to allow background edits
+    (e.g., auto summaries, tags). Admins can also perform this.
     """
 
     def has_permission(self, request, view):
-        # AI access (e.g., internal system or staff token)
-        return request.user and (request.user.is_staff or getattr(request, "from_ai", False))
+        user = request.user
+        return (
+            user and (
+                user.is_staff
+                or getattr(request, "from_ai", False)
+                or getattr(user, 'is_ai', False)
+            )
+        )
 
 
 class IsStudentOfInstitution(permissions.BasePermission):
     """
-    Restricts student access to resources only from their institution.
+    Allows students to access resources within their institution.
+    Can be used for restricted visibility logic.
+    """
+
+    def has_object_permission(self, request, view, obj):
+        user = request.user
+        return (
+            user.is_authenticated
+            and hasattr(user, 'profile')
+            and user.profile.role == 'student'
+            and obj.institution == user.profile.institution
+        )
+
+
+class IsInstitutionAdminOrUploader(permissions.BasePermission):
+    """
+    Allows only institution-level admin or the original uploader to edit/delete.
     """
 
     def has_object_permission(self, request, view, obj):
         user = request.user
         if not user.is_authenticated or not hasattr(user, 'profile'):
             return False
-        return user.profile.institution == obj.institution and user.profile.role == 'student'
+        return (
+            obj.uploader == user
+            or user.profile.role in ['admin', 'super_admin']
+            or (hasattr(user, 'institution') and user.institution == obj.institution)
+        )
+
+
+class IsModeratorOrUploader(permissions.BasePermission):
+    """
+    For moderation workflows: uploader can update their resource,
+    and admins can approve/reject content.
+    """
+
+    def has_object_permission(self, request, view, obj):
+        user = request.user
+        if not user.is_authenticated or not hasattr(user, 'profile'):
+            return False
+        return (
+            obj.uploader == user
+            or user.profile.role in ['admin', 'super_admin', 'moderator']
+        )

@@ -5,9 +5,9 @@ from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
 from accounts.models import CustomUser, Institution
 
-# ===============================
-# 🔒 Email utilities
-# ===============================
+
+#  Email utilities
+
 
 def normalize_email(email: str) -> str:
     """Normalize email by lowering case and stripping whitespace."""
@@ -23,9 +23,9 @@ def validate_school_email_domain(email: str, domain: str):
         raise ValidationError(_("Email must end with @%(domain)s"), params={'domain': domain})
 
 
-# ===============================
-# 👤 Role & access utilities
-# ===============================
+
+#  Role & access utilities
+
 
 def is_role(user: CustomUser, role: str) -> bool:
     """Check if a user has a specific role."""
@@ -46,9 +46,9 @@ def can_manage_user(manager: CustomUser, target: CustomUser) -> bool:
     ]
 
 
-# ===============================
-# 🔄 Account switching logic
-# ===============================
+
+#  Account switching logic
+
 
 def is_switchable_account(requesting_user: CustomUser, target_user: CustomUser) -> bool:
     """
@@ -62,9 +62,9 @@ def is_switchable_account(requesting_user: CustomUser, target_user: CustomUser) 
     return False
 
 
-# ===============================
-# 🏫 Institution helpers
-# ===============================
+
+# Institution helpers
+
 
 def get_institution_from_email(email: str) -> Institution | None:
     """
@@ -74,18 +74,18 @@ def get_institution_from_email(email: str) -> Institution | None:
     return Institution.objects.filter(location__icontains=domain).first()
 
 
-# ===============================
-# 📅 Timestamp utility
-# ===============================
+
+#  Timestamp utility
+
 
 def now():
     """Return timezone-aware current time."""
     return timezone.now()
 
 
-# ===============================
-# 📞 Phone number utilities
-# ===============================
+
+#  Phone number utilities
+
 
 def normalize_phone_number(phone: str) -> str:
     """
@@ -104,9 +104,9 @@ def normalize_phone_number(phone: str) -> str:
     raise ValidationError(_("Invalid Kenyan phone number format."))
 
 
-# ===============================
-# 🔄 Role label + details
-# ===============================
+
+#  Role label + details
+
 
 def get_role_label(role_key: str) -> str:
     """Return human-readable label for a role key."""

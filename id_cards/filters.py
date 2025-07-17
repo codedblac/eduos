@@ -1,27 +1,62 @@
+# id_cards/filters.py
+
 import django_filters
-from .models import IDCard
-from django.db.models import Q
+from .models import IDCard, IDCardAuditLog, IDCardReissueRequest
+from institutions.models import Institution
+from accounts.models import CustomUser
 
 
 class IDCardFilter(django_filters.FilterSet):
-    institution = django_filters.NumberFilter(field_name='user__institution__id', lookup_expr='exact')
-    role = django_filters.CharFilter(field_name='user__role', lookup_expr='iexact')
-    status = django_filters.ChoiceFilter(field_name='status', choices=IDCard.STATUS_CHOICES)
-    issued_after = django_filters.DateFilter(field_name='issued_on', lookup_expr='gte')
-    issued_before = django_filters.DateFilter(field_name='issued_on', lookup_expr='lte')
-    expires_after = django_filters.DateFilter(field_name='expiry_date', lookup_expr='gte')
-    expires_before = django_filters.DateFilter(field_name='expiry_date', lookup_expr='lte')
-    is_digital = django_filters.BooleanFilter(field_name='is_digital')
+    role = django_filters.ChoiceFilter(field_name='role', choices=IDCard.ROLE_CHOICES)
+    institution = django_filters.ModelChoiceFilter(queryset=Institution.objects.all())
+    is_active = django_filters.BooleanFilter()
+    revoked = django_filters.BooleanFilter()
+    printed = django_filters.BooleanFilter()
+    digital_only = django_filters.BooleanFilter()
+    issued_on = django_filters.DateFromToRangeFilter()
+    expiry_date = django_filters.DateFromToRangeFilter()
 
     class Meta:
         model = IDCard
         fields = [
-            'institution',
             'role',
-            'status',
-            'issued_after',
-            'issued_before',
-            'expires_after',
-            'expires_before',
-            'is_digital',
+            'institution',
+            'is_active',
+            'revoked',
+            'printed',
+            'digital_only',
+            'issued_on',
+            'expiry_date',
+        ]
+
+
+class IDCardAuditLogFilter(django_filters.FilterSet):
+    action = django_filters.ChoiceFilter(field_name='action', choices=IDCardAuditLog.ACTION_CHOICES)
+    timestamp = django_filters.DateFromToRangeFilter()
+    performed_by = django_filters.ModelChoiceFilter(queryset=CustomUser.objects.all())
+
+    class Meta:
+        model = IDCardAuditLog
+        fields = [
+            'action',
+            'timestamp',
+            'performed_by',
+        ]
+
+
+class IDCardReissueRequestFilter(django_filters.FilterSet):
+    approved = django_filters.BooleanFilter()
+    created_on = django_filters.DateFromToRangeFilter()
+    approved_on = django_filters.DateFromToRangeFilter()
+    requester = django_filters.ModelChoiceFilter(queryset=CustomUser.objects.all())
+    handled_by = django_filters.ModelChoiceFilter(queryset=CustomUser.objects.all())
+
+    class Meta:
+        model = IDCardReissueRequest
+        fields = [
+            'approved',
+            'created_on',
+            'approved_on',
+            'requester',
+            'handled_by',
         ]

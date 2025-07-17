@@ -4,6 +4,8 @@ from django.utils import timezone
 from institutions.models import Institution
 from academics.models import AcademicYear, Term
 from students.models import Student
+from django.contrib.contenttypes.models import ContentType
+from django.contrib.contenttypes.fields import GenericForeignKey
 
 User = settings.AUTH_USER_MODEL
 
@@ -12,9 +14,17 @@ class Currency(models.Model):
     code = models.CharField(max_length=5, default='KES')
     symbol = models.CharField(max_length=5, default='KSh')
     exchange_rate = models.DecimalField(max_digits=10, decimal_places=4)
+    is_active = models.BooleanField(default=True)
+    is_default = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.code} ({self.symbol})"
+
+
+class CurrencyRateHistory(models.Model):
+    currency = models.ForeignKey(Currency, on_delete=models.CASCADE, related_name='rate_history')
+    rate = models.DecimalField(max_digits=10, decimal_places=4)
+    recorded_at = models.DateTimeField(auto_now_add=True)
 
 
 class FundSource(models.Model):
@@ -40,12 +50,22 @@ class ExpenseCategory(models.Model):
 
 
 class Budget(models.Model):
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('submitted', 'Submitted'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
+
     institution = models.ForeignKey(Institution, on_delete=models.CASCADE)
     academic_year = models.ForeignKey(AcademicYear, on_delete=models.CASCADE)
     term = models.ForeignKey(Term, on_delete=models.CASCADE)
     total_income_estimate = models.DecimalField(max_digits=12, decimal_places=2)
     total_expense_estimate = models.DecimalField(max_digits=12, decimal_places=2)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_budgets')
+    approved_on = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -79,11 +99,19 @@ class Expense(models.Model):
         return f"Expense: {self.description} - {self.amount}"
 
 
+class InvoiceLineItem(models.Model):
+    invoice = models.ForeignKey('StudentInvoice', on_delete=models.CASCADE, related_name='line_items')
+    description = models.CharField(max_length=255)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+
+
 class Refund(models.Model):
     student = models.ForeignKey(Student, on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     reason = models.TextField()
     status = models.CharField(max_length=20, choices=[('pending', 'Pending'), ('approved', 'Approved'), ('rejected', 'Rejected')], default='pending')
+    ref_number = models.CharField(max_length=100, unique=True)
+    document = models.FileField(upload_to='refund_documents/', blank=True, null=True)
     requested_on = models.DateTimeField(auto_now_add=True)
     approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_refunds')
     approved_on = models.DateTimeField(null=True, blank=True)
@@ -109,6 +137,7 @@ class Waiver(models.Model):
 class StudentWallet(models.Model):
     student = models.OneToOneField(Student, on_delete=models.CASCADE)
     balance = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    is_frozen = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
@@ -120,6 +149,8 @@ class WalletTransaction(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     type = models.CharField(max_length=10, choices=[('credit', 'Credit'), ('debit', 'Debit')])
     reference = models.CharField(max_length=255)
+    source = models.CharField(max_length=100, blank=True, null=True)
+    status = models.CharField(max_length=20, choices=[('pending', 'Pending'), ('completed', 'Completed'), ('reversed', 'Reversed')], default='completed')
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -192,7 +223,9 @@ class TransactionLog(models.Model):
 
 class ApprovalRequest(models.Model):
     request_type = models.CharField(max_length=50)
-    reference_id = models.IntegerField()
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey('content_type', 'object_id')
     requested_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='finance_approver')
     status = models.CharField(max_length=20, choices=[('pending', 'Pending'), ('approved', 'Approved'), ('rejected', 'Rejected')])
@@ -202,7 +235,9 @@ class ApprovalRequest(models.Model):
 
 class FinanceNotification(models.Model):
     recipient = models.ForeignKey(User, on_delete=models.CASCADE)
+    type = models.CharField(max_length=50, default='info')
     message = models.TextField()
+    action_url = models.URLField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     read = models.BooleanField(default=False)
 
@@ -242,6 +277,7 @@ class RecurringTransaction(models.Model):
     end_date = models.DateField(null=True, blank=True)
     next_run = models.DateField()
     active = models.BooleanField(default=True)
+    last_run = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.type.title()} - {self.description}"
@@ -254,6 +290,7 @@ class JournalEntry(models.Model):
     credit_account = models.CharField(max_length=100)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     posted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    is_reconciled = models.BooleanField(default=False)
 
     def __str__(self):
         return f"Journal: {self.description} - {self.amount}"
@@ -266,6 +303,18 @@ class AuditTrail(models.Model):
     performed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     timestamp = models.DateTimeField(auto_now_add=True)
     notes = models.TextField(blank=True)
+    old_value = models.TextField(blank=True, null=True)
+    new_value = models.TextField(blank=True, null=True)
 
     def __str__(self):
         return f"Audit: {self.model_name} - {self.action}"
+
+
+class ChartOfAccount(models.Model):
+    code = models.CharField(max_length=10, unique=True)
+    name = models.CharField(max_length=100)
+    type = models.CharField(max_length=20, choices=[('asset', 'Asset'), ('liability', 'Liability'), ('equity', 'Equity'), ('income', 'Income'), ('expense', 'Expense')])
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.code} - {self.name}"

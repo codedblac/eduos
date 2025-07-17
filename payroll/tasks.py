@@ -10,7 +10,7 @@ from .models import (
     SalaryAdvanceRequest, PayrollAuditLog
 )
 from notifications.utils import send_notification_to_user
-from .ai import detect_salary_anomalies, detect_fraudulent_patterns
+from .ai import PayrollAIEngine
 
 
 @shared_task
@@ -65,7 +65,7 @@ def run_payroll_anomaly_checks(payroll_run_id):
     Run anomaly detection on recently processed payroll data.
     """
     payroll_run = PayrollRun.objects.get(id=payroll_run_id)
-    anomalies = detect_salary_anomalies(payroll_run)
+    anomalies = PayrollAIEngine(payroll_run)
 
     for anomaly in anomalies:
         send_notification_to_user(
@@ -81,7 +81,7 @@ def detect_fraud_patterns():
     """
     Global fraud pattern detection — across recent payroll activity.
     """
-    issues = detect_fraudulent_patterns()
+    issues = PayrollAIEngine()
 
     for issue in issues:
         send_notification_to_user(

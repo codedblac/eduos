@@ -186,3 +186,21 @@ class LessonTemplate(models.Model):
 
     def __str__(self):
         return f"Template: {self.title} ({self.subject.name})"
+
+
+class LessonScaffoldSuggestion(models.Model):
+    lesson = models.ForeignKey(
+        "lessons.LessonPlan",  
+        on_delete=models.CASCADE,
+        related_name="scaffold_suggestions"
+    )
+    suggestion = models.TextField()
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Suggestion for {self.lesson} by {self.created_by}"

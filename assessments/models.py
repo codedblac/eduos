@@ -226,3 +226,13 @@ class PerformanceTrend(models.Model):
 
     def __str__(self):
         return f"Trend - {self.student} - {self.subject}"
+
+
+class AssessmentResult(models.Model):
+    student = models.ForeignKey(Student, on_delete=models.CASCADE)
+    assessment = models.ForeignKey(Assessment, on_delete=models.CASCADE)
+    score = models.DecimalField(max_digits=5, decimal_places=2)
+    submitted_on = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.student} - {self.assessment} - {self.score}"

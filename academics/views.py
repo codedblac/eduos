@@ -11,7 +11,7 @@ from .serializers import (
     AcademicEventSerializer,
     HolidayBreakSerializer
 )
-from .permissions import IsAcademicAdminOrReadOnly, IsAcademicEditor
+from .permissions import IsInstitutionAdminOrReadOnly, IsSuperAdminOrReadOnly
 from .filters import (
     AcademicYearFilter,
     TermFilter,
@@ -24,7 +24,7 @@ from . import analytics, ai
 class AcademicYearViewSet(viewsets.ModelViewSet):
     queryset = AcademicYear.objects.all()
     serializer_class = AcademicYearSerializer
-    permission_classes = [IsAcademicAdminOrReadOnly]
+    permission_classes = [IsInstitutionAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend]
     filterset_class = AcademicYearFilter
 
@@ -37,7 +37,7 @@ class AcademicYearViewSet(viewsets.ModelViewSet):
 class TermViewSet(viewsets.ModelViewSet):
     queryset = Term.objects.select_related('academic_year')
     serializer_class = TermSerializer
-    permission_classes = [IsAcademicAdminOrReadOnly]
+    permission_classes = [IsInstitutionAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend]
     filterset_class = TermFilter
 
@@ -85,7 +85,7 @@ class TermViewSet(viewsets.ModelViewSet):
 class AcademicEventViewSet(viewsets.ModelViewSet):
     queryset = AcademicEvent.objects.select_related('academic_year', 'term')
     serializer_class = AcademicEventSerializer
-    permission_classes = [IsAcademicEditor]
+    permission_classes = [IsSuperAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend]
     filterset_class = AcademicEventFilter
 
@@ -98,7 +98,7 @@ class AcademicEventViewSet(viewsets.ModelViewSet):
 class HolidayBreakViewSet(viewsets.ModelViewSet):
     queryset = HolidayBreak.objects.select_related('term')
     serializer_class = HolidayBreakSerializer
-    permission_classes = [IsAcademicEditor]
+    permission_classes = [IsSuperAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend]
     filterset_class = HolidayBreakFilter
 

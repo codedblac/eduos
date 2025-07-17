@@ -1,80 +1,112 @@
+# alumni/ai.py
+
 from datetime import timedelta
 from django.utils import timezone
-from django.db.models import Sum, Count, Q
+from django.db.models import Count, Avg, Q
+from sklearn.cluster import KMeans
+import numpy as np
 
-from .models import AlumniProfile, AlumniContribution, AlumniEvent
-from accounts.models import CustomUser
+from .models import (
+    AlumniProfile, AlumniDonation, AlumniMentorship,
+    AlumniEventRegistration, AlumniEmployment
+)
 
-import random
 
+class AlumniAIAgent:
+    """
+    AI-powered engine to derive insights and recommendations
+    for alumni engagement, donation prediction, and mentorship matching.
+    """
 
-class AlumniAIEngine:
+    def __init__(self, institution):
+        self.institution = institution
 
-    @staticmethod
-    def predict_contribution_likelihood(alumni: AlumniProfile) -> float:
+    def predict_top_donors(self, top_n=5):
         """
-        Predict the likelihood of an alumni making a contribution based on history and engagement.
-        Returns a float between 0.0 and 1.0.
+        Predict alumni who are likely to donate based on past donations and engagement.
         """
-        contributions = AlumniContribution.objects.filter(alumni=alumni)
-        total = contributions.aggregate(Sum('amount'))['amount__sum'] or 0
-        count = contributions.count()
-        days_since_last = (timezone.now() - contributions.latest('date_contributed').date_contributed).days if count else 999
+        alumni = AlumniProfile.objects.filter(institution=self.institution).annotate(
+            total_donations=Count('alumnidonation'),
+            events_attended=Count('eventregistration'),
+            mentorships=Count('mentorships')
+        )
 
-        engagement_score = alumni.engagement_score if hasattr(alumni, 'engagement_score') else 0.5
-        recency_factor = max(0, 1 - (days_since_last / 180))
+        ranked = sorted(
+            alumni,
+            key=lambda a: (
+                getattr(a, 'total_donations', 0) * 2 +
+                getattr(a, 'events_attended', 0) +
+                getattr(a, 'mentorships', 0)
+            ),
+            reverse=True
+        )
+        return ranked[:top_n]
 
-        likelihood = min(1.0, (count / 10.0) * 0.4 + (total / 10000.0) * 0.3 + recency_factor * 0.2 + engagement_score * 0.1)
-        return round(likelihood, 2)
-
-    @staticmethod
-    def recommend_events_for_alumni(alumni: AlumniProfile, limit=3):
+    def alumni_engagement_score(self, alumni):
         """
-        Recommend upcoming alumni events based on location, past interest, and institution.
+        Compute an engagement score for a given alumni.
         """
-        return AlumniEvent.objects.filter(
-            Q(target_year=alumni.graduation_year) |
-            Q(location__icontains=alumni.location) |
-            Q(institution=alumni.institution)
-        ).order_by('event_date')[:limit]
+        donations = AlumniDonation.objects.filter(alumni=alumni).count()
+        registrations = AlumniEventRegistration.objects.filter(alumni=alumni).count()
+        mentorships = AlumniMentorship.objects.filter(mentor=alumni).count()
 
-    @staticmethod
-    def generate_personalized_message(user: CustomUser, purpose: str = "contribution_request") -> str:
+        score = donations * 2 + registrations + mentorships
+        return score
+
+    def identify_inactive_alumni(self, days_inactive=365):
         """
-        Generate a personalized AI message based on the user's profile and interaction history.
+        Identify alumni who haven't interacted recently (events, donations, etc.).
         """
-        greeting = f"Dear {user.first_name},"
-        base = "We hope you're doing well and thriving in your journey after graduation."
+        cutoff = timezone.now() - timedelta(days=days_inactive)
 
-        if purpose == "contribution_request":
-            message = (
-                f"{greeting}\n\n{base}\n\n"
-                f"As a valued member of the alumni network of {user.institution.name}, "
-                f"your support helps empower future generations. "
-                f"Would you consider making a contribution today?\n\nThank you for staying connected!"
-            )
-        elif purpose == "event_invitation":
-            message = (
-                f"{greeting}\n\n{base}\n\n"
-                "You're warmly invited to our upcoming alumni event. We'd love to reconnect and celebrate our shared journey. "
-                "Please check your email or app for details.\n\nLooking forward to seeing you!"
-            )
-        else:
-            message = f"{greeting}\n\n{base}"
+        inactive = AlumniProfile.objects.filter(
+            institution=self.institution
+        ).exclude(
+            Q(alumnidonation__donated_on__gte=cutoff) |
+            Q(eventregistration__registered_on__gte=cutoff) |
+            Q(mentorships__start_date__gte=cutoff)
+        ).distinct()
 
-        return message
+        return inactive
 
-    @staticmethod
-    def assign_engagement_score(alumni: AlumniProfile) -> float:
+    def mentorship_recommendations(self, student):
         """
-        Calculate and assign an engagement score based on activity.
+        Recommend mentors to a student based on course/profession matching.
         """
-        contributions = AlumniContribution.objects.filter(alumni=alumni).count()
-        events_attended = alumni.events_attended.count() if hasattr(alumni, 'events_attended') else 0
-        last_login = alumni.user.last_login or timezone.now() - timedelta(days=365)
-        days_inactive = (timezone.now() - last_login).days
+        student_course = student.current_class.course if hasattr(student, 'current_class') else None
 
-        score = min(1.0, (contributions * 0.1) + (events_attended * 0.2) + max(0, 1 - days_inactive / 365) * 0.7)
-        alumni.engagement_score = round(score, 2)
-        alumni.save()
-        return alumni.engagement_score
+        recommended = AlumniProfile.objects.filter(
+            institution=self.institution,
+            course__iexact=student_course
+        ).order_by('-joined_on')[:5]
+
+        return recommended
+
+    def cluster_alumni_by_employment(self, num_clusters=3):
+        """
+        Use KMeans clustering to segment alumni based on employment features.
+        """
+        alumni_qs = AlumniProfile.objects.filter(institution=self.institution).annotate(
+            job_count=Count('employment_records'),
+            avg_duration=Avg('employment_records__end_date')
+        )
+
+        data = []
+        alumni_list = []
+        for alumni in alumni_qs:
+            job_count = alumni.job_count or 0
+            # Dummy value for clustering, replace with proper numeric encoding if available
+            avg_duration = (alumni.avg_duration - timezone.now().date()).days if alumni.avg_duration else 0
+            data.append([job_count, avg_duration])
+            alumni_list.append(alumni)
+
+        if len(data) < num_clusters:
+            return {}
+
+        kmeans = KMeans(n_clusters=num_clusters, random_state=0).fit(data)
+        clusters = {}
+        for i, alumni in enumerate(alumni_list):
+            cluster = kmeans.labels_[i]
+            clusters.setdefault(cluster, []).append(alumni)
+
+        return clusters

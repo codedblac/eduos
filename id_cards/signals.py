@@ -2,41 +2,46 @@
 
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from django.conf import settings
 
 from accounts.models import CustomUser
 from students.models import Student
 from teachers.models import Teacher
 from .tasks import generate_id_card, regenerate_id_cards_on_profile_update
-from .models import IDCard
 
-# Auto-generate ID card on student creation
+
+# --- STUDENT ID CARD SIGNALS ---
+
 @receiver(post_save, sender=Student)
-def create_student_id_card(sender, instance, created, **kwargs):
+def student_id_card_handler(sender, instance, created, **kwargs):
+    """
+    Handle ID card generation and regeneration for students.
+    """
     if created:
         generate_id_card.delay(user_id=instance.id, role='student')
-
-# Regenerate ID if student profile is updated
-@receiver(post_save, sender=Student)
-def update_student_id_card(sender, instance, created, **kwargs):
-    if not created:
+    elif instance.user:
         regenerate_id_cards_on_profile_update.delay(user_id=instance.user.id)
 
-# Auto-generate ID card on teacher creation
+
+# --- TEACHER ID CARD SIGNALS ---
+
 @receiver(post_save, sender=Teacher)
-def create_teacher_id_card(sender, instance, created, **kwargs):
+def teacher_id_card_handler(sender, instance, created, **kwargs):
+    """
+    Handle ID card generation and regeneration for teachers.
+    """
     if created:
         generate_id_card.delay(user_id=instance.id, role='teacher')
-
-# Regenerate ID if teacher profile is updated
-@receiver(post_save, sender=Teacher)
-def update_teacher_id_card(sender, instance, created, **kwargs):
-    if not created:
+    elif instance.user:
         regenerate_id_cards_on_profile_update.delay(user_id=instance.user.id)
 
-# Auto-generate/re-generate ID card for non-teaching staff & admins
+
+# --- STAFF / ADMIN ID CARD SIGNALS ---
+
 @receiver(post_save, sender=CustomUser)
-def handle_staff_id_card(sender, instance, created, **kwargs):
+def staff_admin_id_card_handler(sender, instance, created, **kwargs):
+    """
+    Handle ID card generation and regeneration for non-teaching staff or admins.
+    """
     if instance.role in ['admin', 'staff']:
         if created:
             generate_id_card.delay(user_id=instance.id, role=instance.role)

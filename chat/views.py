@@ -11,11 +11,11 @@ from .models import (
     ChannelAnnouncement, MediaAttachment, MessageReaction, ChatRoomMembership
 )
 from .serializers import (
-    ChatRoomSerializer, ChatMessageSerializer, MessageEditSerializer,
-    MessageReadReceiptSerializer, ChannelAnnouncementSerializer,
+    ChatRoomSerializer, ChatMessageSerializer, MessageEditHistorySerializer,
+    ReadReceiptSerializer, ChannelAnnouncementSerializer,
     MediaAttachmentSerializer, MessageReactionSerializer
 )
-from .permissions import IsRoomMember, IsMessageSender
+from .permissions import IsRoomMember, IsSenderOrReadOnly
 
 
 class ChatRoomViewSet(viewsets.ModelViewSet):
@@ -50,7 +50,7 @@ class ChatMessageViewSet(viewsets.ModelViewSet):
         room = get_object_or_404(ChatRoom, id=self.kwargs['room_id'])
         serializer.save(sender=self.request.user, room=room)
 
-    @action(detail=True, methods=['post'], permission_classes=[IsMessageSender])
+    @action(detail=True, methods=['post'], permission_classes=[IsSenderOrReadOnly])
     def edit(self, request, room_id=None, pk=None):
         message = self.get_object()
         serializer = MessageEditSerializer(data=request.data)
@@ -61,7 +61,7 @@ class ChatMessageViewSet(viewsets.ModelViewSet):
         message.save()
         return Response(ChatMessageSerializer(message).data)
 
-    @action(detail=True, methods=['post'], permission_classes=[IsMessageSender])
+    @action(detail=True, methods=['post'], permission_classes=[IsSenderOrReadOnly])
     def soft_delete(self, request, room_id=None, pk=None):
         message = self.get_object()
         message.is_deleted = True
@@ -71,7 +71,7 @@ class ChatMessageViewSet(viewsets.ModelViewSet):
 
 
 class ReadReceiptView(generics.CreateAPIView):
-    serializer_class = MessageReadReceiptSerializer
+    serializer_class = ReadReceiptSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def perform_create(self, serializer):

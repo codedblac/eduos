@@ -9,9 +9,9 @@ from .models import (
     AcademicAuditLog
 )
 
-# ===============================
-# ✅ MINIMAL SERIALIZERS
-# ===============================
+
+#  MINIMAL SERIALIZERS
+
 
 class AcademicYearMinimalSerializer(serializers.ModelSerializer):
     """
@@ -31,9 +31,9 @@ class TermMinimalSerializer(serializers.ModelSerializer):
         fields = ['id', 'name']
 
 
-# ===============================
-# 📅 Academic Year Serializers
-# ===============================
+
+#  Academic Year Serializers
+
 
 class AcademicYearCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -62,9 +62,9 @@ class AcademicYearSerializer(serializers.ModelSerializer):
         ]
 
 
-# ===============================
-# 📘 Term Serializers
-# ===============================
+
+#  Term Serializers
+
 
 class TermCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -88,9 +88,9 @@ class TermSerializer(serializers.ModelSerializer):
         ]
 
 
-# ===============================
-# 🏖️ Holiday / Break Serializers
-# ===============================
+
+#  Holiday / Break Serializers
+
 
 class HolidayBreakCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -107,9 +107,8 @@ class HolidayBreakSerializer(serializers.ModelSerializer):
         fields = ['id', 'term', 'term_name', 'title', 'start_date', 'end_date', 'description']
 
 
-# ===============================
-# 📌 Academic Event Serializers
-# ===============================
+#  Academic Event Serializers
+
 
 class AcademicEventCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -135,9 +134,9 @@ class AcademicEventSerializer(serializers.ModelSerializer):
         ]
 
 
-# ===============================
-# 🧾 Audit Log Serializer
-# ===============================
+
+#  Audit Log Serializer
+
 
 class AcademicAuditLogSerializer(serializers.ModelSerializer):
     actor_name = serializers.CharField(source='actor.get_full_name', read_only=True)

@@ -1,39 +1,31 @@
-from django.db.models.signals import post_save, pre_delete
+from django.db.models.signals import post_save
 from django.dispatch import receiver
-from .models import Guardian, GuardianStudentLink
-from notifications.utils import send_notification_to_user
-from django.contrib.auth import get_user_model
-
-User = get_user_model()
+from .models import GuardianNotification, GuardianStudentLink
+from .tasks import send_guardian_notification_email
+from django.utils.timezone import now
 
 
-@receiver(post_save, sender=Guardian)
-def notify_guardian_account_created(sender, instance, created, **kwargs):
+@receiver(post_save, sender=GuardianNotification)
+def handle_guardian_notification_created(sender, instance, created, **kwargs):
+    """
+    Trigger email sending when a new GuardianNotification is created.
+    """
     if created:
-        send_notification_to_user(
-            user=instance.user,
-            title="👨‍👩‍👧 Welcome to EduOS",
-            message=f"Your guardian account at {instance.institution.name} has been successfully created."
-        )
+        send_guardian_notification_email.delay(instance.id)
 
 
 @receiver(post_save, sender=GuardianStudentLink)
-def notify_guardian_student_link(sender, instance, created, **kwargs):
+def auto_notify_on_linking(sender, instance, created, **kwargs):
+    """
+    Notify guardian when a student is linked to them.
+    """
     if created:
-        student = instance.student
-        relationship = instance.relationship or "Guardian"
-        send_notification_to_user(
-            user=instance.guardian.user,
-            title="👧 Student Linked",
-            message=f"You have been added as a {relationship} for {student.first_name} {student.last_name}."
+        message = f"You have been linked to student {instance.student.full_name} as their {instance.get_relationship_display()}."
+        GuardianNotification.objects.create(
+            guardian=instance.guardian,
+            institution=instance.guardian.institution,
+            title="New Student Link",
+            message=message,
+            type="announcement",
+            timestamp=now()
         )
-
-
-@receiver(pre_delete, sender=GuardianStudentLink)
-def notify_guardian_student_unlink(sender, instance, **kwargs):
-    student = instance.student
-    send_notification_to_user(
-        user=instance.guardian.user,
-        title="🗑️ Student Unlinked",
-        message=f"{student.first_name} {student.last_name} has been unlinked from your account."
-    )

@@ -1,7 +1,8 @@
-# transport/signals.py
-
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
+from django.utils import timezone
+from datetime import timedelta
+
 from .models import (
     TransportBooking,
     MaintenanceRecord,
@@ -9,48 +10,49 @@ from .models import (
     TripLog
 )
 from notifications.utils import send_notification
-from django.utils import timezone
-from datetime import timedelta
+
 
 @receiver(post_save, sender=TransportBooking)
 def handle_booking_creation(sender, instance, created, **kwargs):
     if created:
-        # Notify driver or transport admin
-        message = f"New transport booking requested by {instance.requested_by.get_full_name()} for {instance.purpose}"
+        message = f"New transport booking for {instance.student.full_name()} on {instance.travel_date}."
         send_notification(
             institution=instance.institution,
             title="New Transport Booking",
             message=message,
-            roles=["transport_admin", "driver"]
+            roles=["transport_admin"]
         )
-    elif instance.status == "approved" and not instance.notified:
-        # Send confirmation to requester
-        message = f"Your transport booking from {instance.start_time} to {instance.end_time} has been approved."
+
+    elif instance.status == "confirmed":
+        message = f"Your transport booking for {instance.travel_date} has been confirmed."
         send_notification(
             institution=instance.institution,
-            title="Booking Approved",
+            title="Booking Confirmed",
             message=message,
-            users=[instance.requested_by]
+            users=[instance.booked_by]
         )
-        instance.notified = True
-        instance.save(update_fields=['notified'])
+
 
 @receiver(post_save, sender=MaintenanceRecord)
 def notify_maintenance_logged(sender, instance, created, **kwargs):
     if created:
-        message = f"A new maintenance record has been added for vehicle {instance.vehicle.name}: {instance.issue_reported}"
+        message = f"New maintenance: {instance.maintenance_type} for {instance.vehicle.plate_number}."
         send_notification(
             institution=instance.institution,
-            title="Vehicle Maintenance Recorded",
+            title="Maintenance Record Added",
             message=message,
             roles=["transport_admin", "mechanic"]
         )
 
+
 @receiver(post_save, sender=TripLog)
 def track_trip_completion(sender, instance, created, **kwargs):
-    if created and instance.end_time:
+    if instance.status == "completed" and instance.end_time:
         duration = (instance.end_time - instance.start_time).total_seconds() / 3600
-        message = f"Trip by {instance.driver.get_full_name()} from {instance.start_time} to {instance.end_time} completed. Duration: {duration:.2f} hrs"
+        message = (
+            f"Trip completed for route {instance.route.name} by {instance.driver.user.get_full_name()}.\n"
+            f"Duration: {duration:.2f} hrs"
+        )
         send_notification(
             institution=instance.institution,
             title="Trip Completed",
@@ -58,22 +60,26 @@ def track_trip_completion(sender, instance, created, **kwargs):
             roles=["transport_admin"]
         )
 
+
 @receiver(pre_save, sender=Vehicle)
 def alert_low_fuel_or_maintenance_due(sender, instance, **kwargs):
     try:
         old = Vehicle.objects.get(pk=instance.pk)
-        if instance.fuel_level < 15 and old.fuel_level >= 15:
-            send_notification(
-                institution=instance.institution,
-                title="Low Fuel Alert",
-                message=f"{instance.name} has low fuel ({instance.fuel_level}%)",
-                roles=["transport_admin"]
-            )
-        if instance.last_maintenance and instance.last_maintenance + timedelta(days=180) < timezone.now():
+        # Only alert if the fuel level dropped significantly
+        if hasattr(instance, "fuel_level") and hasattr(old, "fuel_level"):
+            if instance.fuel_level < 15 and old.fuel_level >= 15:
+                send_notification(
+                    institution=instance.institution,
+                    title="Low Fuel Alert",
+                    message=f"Vehicle {instance.plate_number} has low fuel ({instance.fuel_level}%)",
+                    roles=["transport_admin"]
+                )
+
+        if instance.last_service_date and instance.last_service_date + timedelta(days=180) < timezone.now().date():
             send_notification(
                 institution=instance.institution,
                 title="Maintenance Due",
-                message=f"{instance.name} may be due for maintenance (last: {instance.last_maintenance})",
+                message=f"Vehicle {instance.plate_number} is overdue for maintenance (last: {instance.last_service_date})",
                 roles=["transport_admin"]
             )
     except Vehicle.DoesNotExist:

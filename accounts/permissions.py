@@ -4,7 +4,7 @@ from accounts.models import CustomUser
 
 class IsSuperAdmin(permissions.BasePermission):
     """
-    ✅ Allows access only to super admins.
+    Allows access only to super admins.
     """
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.role == CustomUser.Role.SUPER_ADMIN
@@ -12,7 +12,7 @@ class IsSuperAdmin(permissions.BasePermission):
 
 class IsInstitutionAdmin(permissions.BasePermission):
     """
-    ✅ Allows access only to institution (school) admins.
+    Allows access only to institution (school) admins.
     """
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.role == CustomUser.Role.ADMIN
@@ -20,7 +20,7 @@ class IsInstitutionAdmin(permissions.BasePermission):
 
 class IsInstitutionStaff(permissions.BasePermission):
     """
-    ✅ Allows access only to institutional users (staff, teacher, etc.).
+    Allows access only to institutional users (staff, teacher, etc.).
     Excludes public and government roles.
     """
     def has_permission(self, request, view):
@@ -38,7 +38,7 @@ class IsInstitutionStaff(permissions.BasePermission):
 
 class IsPublicUser(permissions.BasePermission):
     """
-    ✅ Allows access only to public platform users (not school-linked).
+    Allows access only to public platform users (not school-linked).
     """
     def has_permission(self, request, view):
         return (
@@ -52,7 +52,7 @@ class IsPublicUser(permissions.BasePermission):
 
 class IsGovernmentUser(permissions.BasePermission):
     """
-    ✅ Allows access only to government users for national dashboards.
+    Allows access only to government users for national dashboards.
     """
     def has_permission(self, request, view):
         return (
@@ -63,7 +63,7 @@ class IsGovernmentUser(permissions.BasePermission):
 
 class IsSameInstitutionOrSuperAdmin(permissions.BasePermission):
     """
-    ✅ Object-level access: allowed if user is from same institution or is SUPER_ADMIN.
+    Object-level access: allowed if user is from same institution or is SUPER_ADMIN.
     """
     def has_object_permission(self, request, view, obj):
         user = request.user
@@ -74,7 +74,7 @@ class IsSameInstitutionOrSuperAdmin(permissions.BasePermission):
 
 class IsSameInstitution(permissions.BasePermission):
     """
-    ✅ Object-level access: only if user is from the same institution.
+    Object-level access: only if user is from the same institution.
     SUPER_ADMIN is NOT allowed.
     """
     def has_object_permission(self, request, view, obj):

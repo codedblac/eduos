@@ -8,8 +8,8 @@ from .models import (
     CommunicationLog,
     AnnouncementAttachment
 )
-from accounts.serializers import UserSimpleSerializer  # Assuming you have this
-from institutions.serializers import InstitutionSimpleSerializer  # Assuming you have this
+from accounts.serializers import UserSerializer  # Assuming you have this
+from institutions.serializers import InstitutionSerializer  # Assuming you have this
 User = get_user_model()
 
 class AnnouncementCategorySerializer(serializers.ModelSerializer):
@@ -26,7 +26,7 @@ class AnnouncementAttachmentSerializer(serializers.ModelSerializer):
 
 
 class CommunicationTargetSerializer(serializers.ModelSerializer):
-    user = UserSimpleSerializer(read_only=True)
+    user = UserSerializer(read_only=True)
     user_id = serializers.PrimaryKeyRelatedField(
         queryset=User.objects.all(), source='user', write_only=True, required=False
     )
@@ -38,8 +38,8 @@ class CommunicationTargetSerializer(serializers.ModelSerializer):
 
 class CommunicationAnnouncementListSerializer(serializers.ModelSerializer):
     category = AnnouncementCategorySerializer(read_only=True)
-    author = UserSimpleSerializer(read_only=True)
-    institution = InstitutionSimpleSerializer(read_only=True)
+    author = UserSerializer(read_only=True)
+    institution = InstitutionSerializer(read_only=True)
     total_targets = serializers.SerializerMethodField()
     total_reads = serializers.SerializerMethodField()
 
@@ -60,8 +60,8 @@ class CommunicationAnnouncementListSerializer(serializers.ModelSerializer):
 
 class CommunicationAnnouncementDetailSerializer(serializers.ModelSerializer):
     category = AnnouncementCategorySerializer(read_only=True)
-    author = UserSimpleSerializer(read_only=True)
-    institution = InstitutionSimpleSerializer(read_only=True)
+    author = UserSerializer(read_only=True)
+    institution = InstitutionSerializer(read_only=True)
     attachments = AnnouncementAttachmentSerializer(many=True, read_only=True, source='attachments')
     targets = CommunicationTargetSerializer(many=True, read_only=True)
     total_reads = serializers.SerializerMethodField()
@@ -94,7 +94,7 @@ class CommunicationAnnouncementCreateSerializer(serializers.ModelSerializer):
 
 
 class CommunicationReadLogSerializer(serializers.ModelSerializer):
-    user = UserSimpleSerializer(read_only=True)
+    user = UserSerializer(read_only=True)
 
     class Meta:
         model = CommunicationReadLog

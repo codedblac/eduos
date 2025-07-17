@@ -12,7 +12,7 @@ from .models import (
 from .serializers import (
     RoleSerializer, PermissionSerializer, RolePermissionSerializer,
     UserRoleAssignmentSerializer, UserRoleAssignmentDetailSerializer,
-    AuditLogSerializer
+    RoleAuditLogSerializer
 )
 from .filters import (
     RoleFilter, PermissionFilter, RolePermissionFilter,
@@ -89,7 +89,7 @@ class UserRoleAssignmentViewSet(viewsets.ModelViewSet):
 
 class RoleAuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = RoleAuditLog.objects.all().select_related('actor', 'role', 'target_user', 'institution')
-    serializer_class = AuditLogSerializer
+    serializer_class = RoleAuditLogSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_class = RoleAuditLogFilter
     search_fields = ['actor__username', 'target_user__username', 'role__name']
@@ -99,7 +99,7 @@ class RoleAuditLogViewSet(viewsets.ReadOnlyModelViewSet):
 
 class PermissionAuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = PermissionAuditLog.objects.all().select_related('actor', 'permission', 'target_role')
-    serializer_class = AuditLogSerializer
+    serializer_class = RoleAuditLogSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_class = PermissionAuditLogFilter
     search_fields = ['actor__username', 'permission__codename', 'target_role__name']

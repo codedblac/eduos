@@ -6,7 +6,7 @@ from .models import AcademicYear, Term, AcademicEvent, HolidayBreak, AcademicAud
 from accounts.models import CustomUser
 
 
-# 🔐 Placeholder: Enhance this via middleware/thread-local context in production
+#  Placeholder: Enhance this via middleware/thread-local context in production
 def get_actor():
     """
     Return the user responsible for the action.
@@ -29,7 +29,7 @@ def log_audit(action: str, instance, model_name: str, notes: str = ''):
     )
 
 
-# 🔁 Post-save Signals
+#  Post-save Signals
 @receiver(post_save, sender=AcademicYear)
 def log_academic_year_save(sender, instance, created, **kwargs):
     action = 'create' if created else 'update'
@@ -74,7 +74,7 @@ def log_holiday_save(sender, instance, created, **kwargs):
     )
 
 
-# ❌ Pre-delete Signals
+#  Pre-delete Signals
 @receiver(pre_delete, sender=AcademicYear)
 @receiver(pre_delete, sender=Term)
 @receiver(pre_delete, sender=AcademicEvent)

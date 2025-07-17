@@ -1,26 +1,30 @@
 import django_filters
 from .models import Guardian, GuardianStudentLink, GuardianNotification
-from institutions.models import Institution
-from students.models import Student
 
 
 class GuardianFilter(django_filters.FilterSet):
-    institution = django_filters.ModelChoiceFilter(queryset=Institution.objects.all())
-    user__first_name = django_filters.CharFilter(lookup_expr='icontains', label="First Name")
-    user__last_name = django_filters.CharFilter(lookup_expr='icontains', label="Last Name")
-    phone_number = django_filters.CharFilter(lookup_expr='icontains')
-    id_number = django_filters.CharFilter(lookup_expr='icontains')
+    institution = django_filters.UUIDFilter(field_name='institution__id')
+    user = django_filters.CharFilter(field_name='user__username', lookup_expr='icontains')
     is_active = django_filters.BooleanFilter()
 
     class Meta:
         model = Guardian
-        fields = ['institution', 'phone_number', 'id_number', 'is_active']
+        fields = ['institution', 'user', 'is_active']
 
 
 class GuardianStudentLinkFilter(django_filters.FilterSet):
-    guardian = django_filters.ModelChoiceFilter(queryset=Guardian.objects.all())
-    student = django_filters.ModelChoiceFilter(queryset=Student.objects.all())
-    relationship = django_filters.CharFilter(lookup_expr='icontains')
+    guardian = django_filters.UUIDFilter(field_name='guardian__id')
+    student = django_filters.UUIDFilter(field_name='student__id')
+    relationship = django_filters.ChoiceFilter(field_name='relationship', choices=[
+        ("father", "Father"),
+        ("mother", "Mother"),
+        ("guardian", "Guardian"),
+        ("sponsor", "Sponsor"),
+        ("uncle", "Uncle"),
+        ("aunt", "Aunt"),
+        ("grandparent", "Grandparent"),
+        ("other", "Other"),
+    ])
     is_primary = django_filters.BooleanFilter()
 
     class Meta:
@@ -29,12 +33,22 @@ class GuardianStudentLinkFilter(django_filters.FilterSet):
 
 
 class GuardianNotificationFilter(django_filters.FilterSet):
-    guardian = django_filters.ModelChoiceFilter(queryset=Guardian.objects.all())
-    institution = django_filters.ModelChoiceFilter(queryset=Institution.objects.all())
-    type = django_filters.CharFilter(lookup_expr='icontains')
+    guardian = django_filters.UUIDFilter(field_name='guardian__id')
+    institution = django_filters.UUIDFilter(field_name='institution__id')
+    type = django_filters.ChoiceFilter(field_name='type', choices=[
+        ("exam_update", "Exam Update"),
+        ("fee_balance", "Fee Balance"),
+        ("medical_alert", "Medical Alert"),
+        ("timetable_update", "Timetable Update"),
+        ("announcement", "General Announcement"),
+        ("discipline", "Discipline Alert"),
+        ("chat", "New Chat Message"),
+        ("wallet", "Wallet Activity"),
+    ])
     is_read = django_filters.BooleanFilter()
-    timestamp__date = django_filters.DateFromToRangeFilter(field_name="timestamp")
+    timestamp_after = django_filters.DateTimeFilter(field_name='timestamp', lookup_expr='gte')
+    timestamp_before = django_filters.DateTimeFilter(field_name='timestamp', lookup_expr='lte')
 
     class Meta:
         model = GuardianNotification
-        fields = ['guardian', 'institution', 'type', 'is_read', 'timestamp__date']
+        fields = ['guardian', 'institution', 'type', 'is_read', 'timestamp_after', 'timestamp_before']

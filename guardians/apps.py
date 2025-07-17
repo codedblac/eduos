@@ -7,4 +7,4 @@ class GuardiansConfig(AppConfig):
     verbose_name = 'Guardian Management'
 
     def ready(self):
-        import guardians.signals  # Ensures signals are registered
+        import guardians.signals  

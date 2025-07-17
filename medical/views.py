@@ -6,8 +6,8 @@ from rest_framework.response import Response
 from django.db.models import Count
 from .models import SickBayVisit, MedicalFlag, MedicineInventory
 from .serializers import (
-    SickBayVisitSerializer,
-    MedicalFlagSerializer,
+    MedicalVisitSerializer,
+    DispensedMedicineSerializer,
     MedicineInventorySerializer
 )
 from .permissions import (
@@ -25,13 +25,13 @@ from students.models import Student
 
 class SickBayVisitCreateView(generics.CreateAPIView):
     queryset = SickBayVisit.objects.all()
-    serializer_class = SickBayVisitSerializer
+    serializer_class = MedicalVisitSerializer
     permission_classes = [permissions.IsAuthenticated, IsMedicalStaff]
 
 
 class SickBayVisitListView(generics.ListAPIView):
     queryset = SickBayVisit.objects.select_related('student', 'recorded_by').all()
-    serializer_class = SickBayVisitSerializer
+    serializer_class = MedicalVisitSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdminOrMedicalStaff]
 
 
@@ -41,13 +41,13 @@ class SickBayVisitListView(generics.ListAPIView):
 
 class MedicalFlagCreateView(generics.CreateAPIView):
     queryset = MedicalFlag.objects.all()
-    serializer_class = MedicalFlagSerializer
+    serializer_class = DispensedMedicineSerializer
     permission_classes = [permissions.IsAuthenticated, IsMedicalStaff]
 
 
 class MedicalFlagListView(generics.ListAPIView):
     queryset = MedicalFlag.objects.select_related('student').all()
-    serializer_class = MedicalFlagSerializer
+    serializer_class = DispensedMedicineSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdminOrMedicalStaff]
 
 

@@ -1,11 +1,11 @@
 from django.utils import timezone
+from django.db.models import Q
 from students.models import Student
 from finance.models import (
     StudentFinanceSnapshot,
     ScholarshipCandidate,
     AnomalyFlag,
 )
-from django.db.models import Q
 import random
 import logging
 
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class FinanceAIEngine:
     """
     Core AI engine for financial insights, predictions, and automation.
-    Extensible with ML scoring models for production use.
+    Extensible with ML scoring models or statistical heuristics.
     """
 
     def __init__(self, academic_year, term, seed=None):
@@ -26,8 +26,8 @@ class FinanceAIEngine:
 
     def predict_default_risk(self, student):
         """
-        Predict a student's likelihood of defaulting on fees.
-        Replace with ML-based probability models in future.
+        Predict a student's default risk based on payment ratio.
+        Replace with ML scoring model in production.
         """
         try:
             snapshot = StudentFinanceSnapshot.objects.get(
@@ -49,44 +49,49 @@ class FinanceAIEngine:
                 return "Low"
 
         except StudentFinanceSnapshot.DoesNotExist:
-            logger.warning(f"[DefaultRisk] No snapshot for {student}")
+            logger.warning(f"[DefaultRisk] No snapshot found for student {student.id}")
             return "Unknown"
 
     def recommend_scholarship_candidates(self, threshold=0.8):
         """
-        Recommend students for scholarships based on financial need + academic potential.
-        Scoring is placeholder. Replace with real need + performance metrics or ML.
+        Recommends students for scholarship based on financial need + performance.
+        Placeholder scoring logic. Replace with ML/scoring models in future.
         """
         candidates = []
 
         eligible_students = Student.objects.filter(is_active=True)
 
         for student in eligible_students:
-            # Placeholder scoring logic
-            need_score = random.uniform(0, 1)         # e.g., income, guardianship, orphan, etc.
-            performance_score = random.uniform(0, 1)  # e.g., academic grades or co-curricular
-            combined_score = (need_score + performance_score) / 2
+            try:
+                # TODO: Replace with actual need and academic performance data
+                need_score = random.uniform(0, 1)
+                performance_score = random.uniform(0, 1)
+                combined_score = (need_score + performance_score) / 2
 
-            if combined_score >= threshold:
-                candidate, _ = ScholarshipCandidate.objects.update_or_create(
-                    student=student,
-                    academic_year=self.academic_year,
-                    defaults={
-                        "score": performance_score,
-                        "need_score": need_score,
-                        "recommended_by_ai": True,
-                    }
-                )
-                candidates.append(candidate)
+                if combined_score >= threshold:
+                    candidate, _ = ScholarshipCandidate.objects.update_or_create(
+                        student=student,
+                        academic_year=self.academic_year,
+                        defaults={
+                            "score": performance_score,
+                            "need_score": need_score,
+                            "recommended_by_ai": True,
+                        }
+                    )
+                    candidates.append(candidate)
+
+            except Exception as e:
+                logger.error(f"[ScholarshipAI] Error evaluating {student.id}: {e}")
 
         logger.info(f"[Scholarships] {len(candidates)} candidates recommended (Threshold ≥ {threshold})")
         return candidates
 
     def flag_financial_anomalies(self):
         """
-        Detect students with suspicious payment behavior — overpayments or deep underpayments.
+        Flags students with anomalous finance activity.
+        Currently flags overpayment > 150% and underpayment < 20%.
         """
-        flags = []
+        anomalies = []
 
         snapshots = StudentFinanceSnapshot.objects.filter(
             academic_year=self.academic_year,
@@ -98,26 +103,26 @@ class FinanceAIEngine:
                 if snapshot.total_invoiced == 0:
                     continue
 
-                overpay_ratio = snapshot.total_paid / snapshot.total_invoiced
+                ratio = snapshot.total_paid / snapshot.total_invoiced
 
-                if overpay_ratio > 1.5:
+                if ratio > 1.5:
                     flag, created = AnomalyFlag.objects.get_or_create(
                         student=snapshot.student,
                         description="Unusual overpayment detected."
                     )
                     if created:
-                        flags.append(flag)
+                        anomalies.append(flag)
 
-                elif overpay_ratio < 0.2:
+                elif ratio < 0.2:
                     flag, created = AnomalyFlag.objects.get_or_create(
                         student=snapshot.student,
                         description="Potential default or severe underpayment."
                     )
                     if created:
-                        flags.append(flag)
+                        anomalies.append(flag)
 
             except Exception as e:
-                logger.error(f"[Anomaly] Error for {snapshot.student}: {e}")
+                logger.error(f"[AnomalyDetection] Failed for {snapshot.student.id}: {e}")
 
-        logger.info(f"[Anomaly] Total anomalies flagged: {len(flags)}")
-        return flags
+        logger.info(f"[AnomalyDetection] Total anomalies flagged: {len(anomalies)}")
+        return anomalies

@@ -4,15 +4,19 @@ from .views import (
     EventViewSet,
     EventTagViewSet,
     RecurringEventRuleViewSet,
-    suggest_event_slots,  # 👈 NEW
+    suggest_event_slots,
 )
 
+# DRF Router setup
 router = DefaultRouter()
 router.register(r'events', EventViewSet, basename='event')
 router.register(r'tags', EventTagViewSet, basename='event-tag')
 router.register(r'recurrence', RecurringEventRuleViewSet, basename='recurring-rule')
 
+# URL patterns
 urlpatterns = [
     path('', include(router.urls)),
-    path('events/suggest-time/', suggest_event_slots, name='suggest-time'),  # 👈 NEW
+    
+    # AI-Powered Scheduling
+    path('events/suggest-time/', suggest_event_slots, name='event-suggest-time'),
 ]

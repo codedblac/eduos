@@ -1,52 +1,30 @@
-from rest_framework import viewsets, permissions, status
-from rest_framework.response import Response
-from rest_framework import serializers
-from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.decorators import action
 from django.shortcuts import get_object_or_404
-from .models import Guardian, GuardianStudentLink, GuardianNotification
-from .serializers import GuardianSerializer, GuardianStudentLinkSerializer, GuardianNotificationSerializer
-from .permissions import IsGuardianOrReadOnly, IsInstitutionAdmin
-from institutions.models import Institution
-from students.models import Student
 from django.db.models import Q
+
+from rest_framework import viewsets, permissions, status, serializers
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
+
+from .models import Guardian, GuardianStudentLink, GuardianNotification
+from .serializers import (
+    GuardianSerializer,
+    GuardianStudentLinkSerializer,
+    GuardianNotificationSerializer,
+)
+from .permissions import IsGuardianOrReadOnly, IsInstitutionAdminOrStaff
 from .analytics import GuardianAnalytics
+from .ai import GuardianAIEngine
 
-
-class GuardianAnalyticsView(APIView):
-    """
-    Returns simple analytics related to guardian activity.
-    """
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request, *args, **kwargs):
-        user = request.user
-        try:
-            guardian = Guardian.objects.get(user=user)
-        except Guardian.DoesNotExist:
-            return Response({"detail": "Guardian profile not found."}, status=404)
-
-        total_students = guardian.student_links.count()
-        unread_notifications = guardian.notifications.filter(is_read=False).count()
-        total_notifications = guardian.notifications.count()
-
-        data = {
-            "guardian_name": user.get_full_name(),
-            "linked_students": total_students,
-            "total_notifications": total_notifications,
-            "unread_notifications": unread_notifications,
-        }
-        return Response(data)
 
 class GuardianViewSet(viewsets.ModelViewSet):
     queryset = Guardian.objects.select_related('user', 'institution')
     serializer_class = GuardianSerializer
-    permission_classes = [permissions.IsAuthenticated, IsInstitutionAdmin]
+    permission_classes = [permissions.IsAuthenticated, IsInstitutionAdminOrStaff]
 
     def get_queryset(self):
-        institution = self.request.user.institution
-        return self.queryset.filter(institution=institution)
+        return self.queryset.filter(institution=self.request.user.institution)
 
     @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
     def me(self, request):
@@ -55,21 +33,25 @@ class GuardianViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
-    def analytics(self, request):
-        institution = request.user.institution
-        analytics = GuardianAnalytics(institution)
-        data = analytics.generate_summary()
+    def ai_summary(self, request):
+        guardian = get_object_or_404(Guardian, user=request.user)
+        engine = GuardianAIEngine(guardian)
+        data = engine.run_analysis()
         return Response(data)
+
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated, IsInstitutionAdminOrStaff])
+    def analytics(self, request):
+        analytics = GuardianAnalytics(institution=request.user.institution)
+        return Response(analytics.generate_summary())
 
 
 class GuardianStudentLinkViewSet(viewsets.ModelViewSet):
     queryset = GuardianStudentLink.objects.select_related('guardian', 'student')
     serializer_class = GuardianStudentLinkSerializer
-    permission_classes = [permissions.IsAuthenticated, IsInstitutionAdmin]
+    permission_classes = [permissions.IsAuthenticated, IsInstitutionAdminOrStaff]
 
     def get_queryset(self):
-        institution = self.request.user.institution
-        return self.queryset.filter(student__institution=institution)
+        return self.queryset.filter(student__institution=self.request.user.institution)
 
     def perform_create(self, serializer):
         guardian = serializer.validated_data['guardian']
@@ -101,25 +83,47 @@ class GuardianNotificationViewSet(viewsets.ModelViewSet):
     def unread(self, request):
         user = request.user
         if hasattr(user, 'guardian'):
-            unread = self.queryset.filter(guardian=user.guardian, is_read=False)
-            serializer = self.get_serializer(unread, many=True)
+            unread_qs = self.get_queryset().filter(is_read=False)
+            serializer = self.get_serializer(unread_qs, many=True)
             return Response(serializer.data)
         return Response([])
 
-    @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated, IsInstitutionAdmin])
+    @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated, IsInstitutionAdminOrStaff])
     def bulk_send(self, request):
         institution = request.user.institution
-        data = request.data
-        title = data.get('title')
-        message = data.get('message')
-        type = data.get('type', 'announcement')
+        title = request.data.get('title')
+        message = request.data.get('message')
+        type = request.data.get('type', 'announcement')
+
+        if not title or not message:
+            return Response({'detail': 'Title and message are required.'}, status=400)
 
         guardians = Guardian.objects.filter(institution=institution)
         notifications = [
             GuardianNotification(
-                guardian=g, institution=institution, title=title,
-                message=message, type=type
+                guardian=g,
+                institution=institution,
+                title=title,
+                message=message,
+                type=type
             ) for g in guardians
         ]
         GuardianNotification.objects.bulk_create(notifications)
-        return Response({'status': 'bulk notifications sent'}, status=status.HTTP_201_CREATED)
+        return Response({'status': 'Bulk notifications sent.'}, status=status.HTTP_201_CREATED)
+
+
+class GuardianAnalyticsView(APIView):
+    """
+    Lightweight self-service analytics for a single guardian.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        try:
+            guardian = Guardian.objects.get(user=request.user)
+        except Guardian.DoesNotExist:
+            return Response({"detail": "Guardian profile not found."}, status=404)
+
+        engine = GuardianAIEngine(guardian)
+        data = engine.run_analysis()
+        return Response(data)

@@ -1,7 +1,7 @@
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from django.utils import timezone
 from django.db.models import Sum
+from django.utils import timezone
 
 from finance.models import (
     Income, Expense, Refund, Waiver, StudentFinanceSnapshot,
@@ -40,9 +40,9 @@ def log_expense_transaction(sender, instance, created, **kwargs):
 
 
 @receiver(post_save, sender=Refund)
-def handle_refund_approval(sender, instance, created, **kwargs):
+def handle_refund_approval(sender, instance, **kwargs):
     if instance.status == 'approved' and instance.approved_by:
-        log, created = TransactionLog.objects.get_or_create(
+        TransactionLog.objects.get_or_create(
             action='refund',
             actor=instance.approved_by,
             details=f"Refund of KES {instance.amount} approved for {instance.student}"
@@ -63,15 +63,14 @@ def handle_refund_approval(sender, instance, created, **kwargs):
 
 
 @receiver(post_save, sender=Waiver)
-def log_waiver_transaction(sender, instance, created, **kwargs):
+def log_waiver_transaction(sender, instance, **kwargs):
     if instance.approved_by and instance.amount > 0:
-        log, created = TransactionLog.objects.get_or_create(
+        TransactionLog.objects.get_or_create(
             action='waiver',
             actor=instance.approved_by,
             details=f"Waiver of KES {instance.amount} approved for {instance.student}"
         )
-        if created:
-            logger.info(f"Waiver transaction logged for {instance.student}")
+        logger.info(f"Waiver transaction logged for {instance.student}")
 
 
 @receiver(post_save, sender=ApprovalRequest)
@@ -102,14 +101,18 @@ def create_finance_snapshot_on_student_creation(sender, instance, created, **kwa
                 student=instance,
                 academic_year=active_year,
                 term=active_term,
-                defaults={'total_invoiced': 0, 'total_paid': 0, 'balance': 0}
+                defaults={
+                    'total_invoiced': 0,
+                    'total_paid': 0,
+                    'balance': 0
+                }
             )
-            logger.info(f"Snapshot created for new student {instance}")
+            logger.info(f"Finance snapshot created for new student {instance}")
 
 
 @receiver(post_save, sender=StudentWallet)
 def notify_low_wallet_balance(sender, instance, **kwargs):
-    threshold = 100  # Customize threshold if needed
+    threshold = 100  # Adjust threshold as needed
     if instance.balance < threshold and hasattr(instance.student, 'user'):
         FinanceNotification.objects.create(
             recipient=instance.student.user,
@@ -123,7 +126,7 @@ def log_wallet_transaction(sender, instance, created, **kwargs):
     if created:
         TransactionLog.objects.create(
             action='income' if instance.type == 'credit' else 'expense',
-            actor=None,
+            actor=None,  # Optional: track bot/system
             details=f"{instance.type.capitalize()} of KES {instance.amount} in wallet. Ref: {instance.reference}"
         )
         logger.info(f"Wallet transaction logged: {instance.type} - {instance.amount}")
@@ -132,31 +135,32 @@ def log_wallet_transaction(sender, instance, created, **kwargs):
 @receiver(post_save, sender=StudentInvoice)
 def sync_finance_snapshot_on_invoice(sender, instance, **kwargs):
     """
-    Sync StudentFinanceSnapshot when an invoice is created or updated.
+    Sync finance snapshot on invoice create/update.
     """
     snapshot, _ = StudentFinanceSnapshot.objects.get_or_create(
         student=instance.student,
         academic_year=instance.academic_year,
         term=instance.term,
         defaults={
-            'total_invoiced': instance.amount,
-            'total_paid': instance.paid_amount,
-            'balance': instance.amount - instance.paid_amount
+            'total_invoiced': instance.total_amount,
+            'total_paid': instance.amount_paid,
+            'balance': instance.balance
         }
     )
 
-    if snapshot:
-        invoices = StudentInvoice.objects.filter(
-            student=instance.student,
-            academic_year=instance.academic_year,
-            term=instance.term
-        )
-        total_invoiced = invoices.aggregate(total=Sum('amount'))['total'] or 0
-        total_paid = invoices.aggregate(total=Sum('paid_amount'))['total'] or 0
+    # Always recalculate to ensure consistency
+    invoices = StudentInvoice.objects.filter(
+        student=instance.student,
+        academic_year=instance.academic_year,
+        term=instance.term
+    )
 
-        snapshot.total_invoiced = total_invoiced
-        snapshot.total_paid = total_paid
-        snapshot.balance = total_invoiced - total_paid
-        snapshot.save()
+    total_invoiced = invoices.aggregate(total=Sum('total_amount'))['total'] or 0
+    total_paid = invoices.aggregate(total=Sum('amount_paid'))['total'] or 0
 
-        logger.info(f"Snapshot updated for {instance.student} due to invoice change")
+    snapshot.total_invoiced = total_invoiced
+    snapshot.total_paid = total_paid
+    snapshot.balance = total_invoiced - total_paid
+    snapshot.save()
+
+    logger.info(f"Finance snapshot synced for {instance.student} in {instance.term} {instance.academic_year}")

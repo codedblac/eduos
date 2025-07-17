@@ -3,9 +3,9 @@ from django.contrib.auth.password_validation import validate_password
 from .models import CustomUser, Institution
 
 
-# ========================
-# 🏫 Institution Serializer
-# ========================
+
+#  Institution Serializer
+
 
 class InstitutionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -13,9 +13,9 @@ class InstitutionSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'is_active', 'created_at']
 
 
-# ========================
-# 👤 Base User Serializer
-# ========================
+
+#  Base User Serializer
+
 
 class UserSerializer(serializers.ModelSerializer):
     institution = InstitutionSerializer(read_only=True)
@@ -34,9 +34,9 @@ class UserSerializer(serializers.ModelSerializer):
         return f"{obj.first_name} {obj.last_name}"
 
 
-# ========================
-# 👤 User Detail Serializer
-# ========================
+
+#  User Detail Serializer
+
 
 class UserDetailSerializer(serializers.ModelSerializer):
     institution_name = serializers.CharField(source='institution.name', read_only=True)
@@ -57,9 +57,9 @@ class UserDetailSerializer(serializers.ModelSerializer):
         return f"{obj.first_name} {obj.last_name}"
 
 
-# ========================
-# ➕ User Creation Serializer
-# ========================
+
+#  User Creation Serializer
+
 
 class UserCreateSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
@@ -99,9 +99,9 @@ class UserCreateSerializer(serializers.ModelSerializer):
         return CustomUser.objects.create_user(password=password, **validated_data)
 
 
-# ========================
-# 🌍 Public Self-Signup Serializer
-# ========================
+
+#  Public Self-Signup Serializer
+
 
 class PublicUserSignupSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
@@ -120,9 +120,9 @@ class PublicUserSignupSerializer(serializers.ModelSerializer):
         return CustomUser.objects.create_user(password=password, **validated_data)
 
 
-# ========================
-# 🔄 Minimal Serializer for Account Switching
-# ========================
+
+#  Minimal Serializer for Account Switching
+
 
 class UserMinimalSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
@@ -135,9 +135,9 @@ class UserMinimalSerializer(serializers.ModelSerializer):
         return f"{obj.first_name} {obj.last_name}"
 
 
-# ========================
-# 🔐 Change Password Serializer
-# ========================
+
+#  Change Password Serializer
+
 
 class ChangePasswordSerializer(serializers.Serializer):
     old_password = serializers.CharField(required=True)
@@ -148,9 +148,9 @@ class ChangePasswordSerializer(serializers.Serializer):
         return value
 
 
-# ========================
-# 🔐 Password Reset Flow Serializers
-# ========================
+
+#  Password Reset Flow Serializers
+
 
 class PasswordResetRequestSerializer(serializers.Serializer):
     email = serializers.EmailField()

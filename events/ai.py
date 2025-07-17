@@ -3,68 +3,81 @@ from datetime import timedelta
 from events.models import Event
 from exams.models import ExamSchedule
 from timetable.models import TimetableEntry
-from institutions.models import Holiday
+from academics.models import HolidayBreak
 from accounts.models import CustomUser
 
 
-def detect_conflicts(start, end, institution, participants=[]):
+def detect_conflicts(start, end, institution, participants=None):
+    """
+    Detects scheduling conflicts for an event within the given time range.
+    Returns a list of conflict messages.
+    """
     conflicts = []
 
-    # Existing overlapping events
-    existing = Event.objects.filter(
+    if participants is None:
+        participants = []
+
+    # Check for overlapping events
+    if Event.objects.filter(
         institution=institution,
         start_time__lt=end,
         end_time__gt=start
-    )
-    if existing.exists():
-        conflicts.append("Overlaps with another event")
+    ).exists():
+        conflicts.append("Conflicts with another scheduled event.")
 
-    # Exams
-    exams = ExamSchedule.objects.filter(
+    # Check for overlapping exam schedules
+    if ExamSchedule.objects.filter(
         institution=institution,
         start_time__lt=end,
         end_time__gt=start
-    )
-    if exams.exists():
-        conflicts.append("Exam scheduled in that period")
+    ).exists():
+        conflicts.append("An exam is scheduled during this time.")
 
-    # Timetable blocks
+    # Check for timetable conflicts for participants
     if participants:
-        ids = [p.id for p in participants]
-        class_blocks = TimetableEntry.objects.filter(
-            institution=institution,
-            teacher__in=ids,
-            start_time__lt=end,
-            end_time__gt=start
-        )
-        if class_blocks.exists():
-            conflicts.append("Timetable conflict")
+        participant_ids = [p.id for p in participants if isinstance(p, CustomUser)]
+        if participant_ids:
+            if TimetableEntry.objects.filter(
+                institution=institution,
+                teacher__in=participant_ids,
+                start_time__lt=end,
+                end_time__gt=start
+            ).exists():
+                conflicts.append("Participant has a timetable conflict.")
 
-    # Holidays
-    if Holiday.objects.filter(institution=institution, date__range=(start.date(), end.date())).exists():
-        conflicts.append("Holiday conflict")
+    # Check for holiday overlap
+    if HolidayBreak.objects.filter(
+        institution=institution,
+        date__range=(start.date(), end.date())
+    ).exists():
+        conflicts.append("The date overlaps with a holiday or term break.")
 
     return conflicts
 
 
-def suggest_slots(institution, duration_minutes=60, participants=[], days_ahead=14, buffer_minutes=15):
+def suggest_slots(institution, duration_minutes=60, participants=None, days_ahead=14, buffer_minutes=15):
+    """
+    Suggests available time slots without conflicts, up to a limited number.
+    Returns a list of dictionaries with start_time, end_time, and confidence level.
+    """
+    if participants is None:
+        participants = []
+
     suggestions = []
     now = timezone.now()
 
-    for day in range(1, days_ahead + 1):
-        base = now + timedelta(days=day)
-        for hour in range(8, 18):  # From 8 AM to 5 PM
-            start = base.replace(hour=hour, minute=0, second=0, microsecond=0)
+    for day_offset in range(1, days_ahead + 1):
+        day = now + timedelta(days=day_offset)
+        for hour in range(8, 18):  # Office hours: 8 AM – 5 PM
+            start = day.replace(hour=hour, minute=0, second=0, microsecond=0)
             end = start + timedelta(minutes=duration_minutes)
 
-            if detect_conflicts(start, end, institution, participants):
-                continue
-
-            suggestions.append({
-                "start_time": start,
-                "end_time": end,
-                "confidence": "high" if hour in [10, 14] else "medium"
-            })
+            if not detect_conflicts(start, end, institution, participants):
+                suggestions.append({
+                    "start_time": start,
+                    "end_time": end,
+                    "confidence": "high" if hour in [10, 14] else "medium"
+                })
 
             if len(suggestions) >= 5:
                 return suggestions

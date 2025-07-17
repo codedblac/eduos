@@ -4,8 +4,36 @@ from django.utils import timezone
 from institutions.models import Institution
 from students.models import Student
 from classes.models import ClassLevel, Stream
+from academics.models import Term
 
 User = settings.AUTH_USER_MODEL
+
+
+class MicroFeeAssignment(models.Model):
+    FEE_TYPE_CHOICES = [
+        ('LAB', 'Lab Fee'),
+        ('CLUB', 'Club Fee'),
+        ('LOCKER', 'Locker Fee'),
+        ('ID', 'ID Card Replacement'),
+        ('OTHER', 'Other'),
+    ]
+
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='micro_fees_student')
+    term = models.ForeignKey(Term, on_delete=models.CASCADE, related_name='micro_fees')
+    fee_type = models.CharField(max_length=20, choices=FEE_TYPE_CHOICES)
+    description = models.TextField(blank=True, null=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    assigned_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='assigned_micro_fees')
+    assigned_at = models.DateTimeField(auto_now_add=True)
+    is_paid = models.BooleanField(default=False)
+    paid_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        unique_together = ('student', 'term', 'fee_type')  
+        ordering = ['-assigned_at']
+
+    def __str__(self):
+        return f"{self.student} - {self.fee_type} ({self.amount})"
 
 
 class Wallet(models.Model):

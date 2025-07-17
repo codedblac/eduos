@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import (
     LessonPlan, LessonSchedule, LessonSession,
-    LessonAttachment, LessonFeedback, LessonTemplate
+    LessonAttachment, LessonFeedback, LessonTemplate,LessonScaffoldSuggestion
 )
 
 
@@ -45,4 +45,11 @@ class LessonPlanSerializer(serializers.ModelSerializer):
 class LessonTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = LessonTemplate
+        fields = '__all__'
+from rest_framework import serializers
+from .models import LessonScaffoldSuggestion
+
+class LessonScaffoldSuggestionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LessonScaffoldSuggestion
         fields = '__all__'

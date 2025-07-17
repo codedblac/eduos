@@ -7,7 +7,7 @@ from notifications.utils import notify_user
 from accounts.models import CustomUser
 from datetime import timedelta
 
-from .ai import LessonPlannerAI
+from .ai import LessonAI
 
 
 @shared_task
@@ -64,7 +64,7 @@ def auto_generate_lesson_plan_suggestions():
             term__is_active=True
         ).exists():
             # Generate suggestions
-            suggestions = LessonPlannerAI.suggest_plans_for_teacher(teacher.id, current_week)
+            suggestions = LessonAI.suggest_plans_for_teacher(teacher.id, current_week)
             if suggestions:
                 notify_user(
                     user=teacher,
@@ -80,7 +80,7 @@ def analyze_coverage_gaps():
     Periodic check to analyze which classes or subjects are falling behind in lesson coverage.
     Sends alerts to teachers/HODs.
     """
-    flagged = LessonPlannerAI.flag_low_coverage_subjects()
+    flagged = LessonAI.flag_low_coverage_subjects()
 
     for entry in flagged:
         teacher = entry.get("teacher")

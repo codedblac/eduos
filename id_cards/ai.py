@@ -1,12 +1,17 @@
 # id_cards/ai.py
 
-import qrcode
 import io
+import qrcode
+import logging
 from PIL import Image
-from django.core.files.base import ContentFile
-from django.conf import settings
-from .models import IDCard
+from typing import Optional
 from django.utils import timezone
+from django.conf import settings
+from django.core.files.base import ContentFile
+
+from .models import IDCard
+
+logger = logging.getLogger(__name__)
 
 
 class IDCardAIEngine:
@@ -23,6 +28,7 @@ class IDCardAIEngine:
         Generate a QR code image from the given data (e.g., user ID, verification URL).
         Returns a Django File object suitable for saving in a model field.
         """
+        logger.debug(f"Generating QR code for data: {data}")
         qr = qrcode.QRCode(version=1, box_size=10, border=4)
         qr.add_data(data)
         qr.make(fit=True)
@@ -31,69 +37,87 @@ class IDCardAIEngine:
         buffer = io.BytesIO()
         img.save(buffer, format="PNG")
         filename = f"qr_{timezone.now().timestamp()}.png"
+
+        logger.info(f"QR code generated: {filename}")
         return ContentFile(buffer.getvalue(), name=filename)
 
-    def auto_generate_id_card(self, user_profile):
+    def auto_generate_id_card(self, user_profile) -> Optional[IDCard]:
         """
-        Generate an ID card for a user (student, teacher, staff).
-        Only runs if no active ID exists.
+        Generate an ID card for a user (student, teacher, staff) if none is active.
         """
-        if IDCard.objects.filter(user=user_profile.user, is_active=True).exists():
-            return None  # Already exists
+        user = getattr(user_profile, 'user', user_profile)
+        if IDCard.objects.filter(user=user, is_active=True).exists():
+            logger.info(f"Active ID card already exists for user {user}")
+            return None
 
-        qr_data = f"{settings.SITE_URL}/verify/id/{user_profile.user.id}/"
+        qr_data = f"{settings.SITE_URL}/verify/id/{user.id}/"
         qr_image = self.generate_qr_code(qr_data)
 
         id_card = IDCard.objects.create(
-            user=user_profile.user,
+            user=user,
             institution=self.institution,
-            role=user_profile.get_role_display(),
+            role=getattr(user_profile, 'get_role_display', lambda: 'UNKNOWN')(),
             qr_code=qr_image,
-            photo=user_profile.photo if hasattr(user_profile, 'photo') else None,
-            name=user_profile.full_name if hasattr(user_profile, 'full_name') else user_profile.user.get_full_name(),
-            id_number=user_profile.user_id if hasattr(user_profile, 'user_id') else user_profile.user.id,
-            department=user_profile.department.name if hasattr(user_profile, 'department') else '',
-            class_level=user_profile.class_level.name if hasattr(user_profile, 'class_level') else '',
+            photo=getattr(user_profile, 'photo', None),
+            name=getattr(user_profile, 'full_name', user.get_full_name()),
+            id_number=getattr(user_profile, 'user_id', user.id),
+            department=getattr(getattr(user_profile, 'department', None), 'name', ''),
+            class_level=getattr(getattr(user_profile, 'class_level', None), 'name', ''),
             valid_until=timezone.now().date().replace(year=timezone.now().year + 1)
         )
+
+        logger.info(f"ID card created for user {user.id}: {id_card.id}")
         return id_card
 
-    def bulk_generate_missing_ids(self):
+    def bulk_generate_missing_ids(self) -> int:
         """
-        Auto-generate missing ID cards for all active users in the institution.
-        Returns a count of how many were created.
+        Auto-generate missing ID cards for all eligible active users in the institution.
+        Returns the number of ID cards created.
         """
         from students.models import Student
         from teachers.models import Teacher
         from accounts.models import CustomUser
 
-        created = 0
+        created_count = 0
 
-        # Process students
-        for student in Student.objects.filter(institution=self.institution, is_active=True):
+        # Students
+        students = Student.objects.filter(institution=self.institution, is_active=True)
+        for student in students:
             if not IDCard.objects.filter(user=student.user, is_active=True).exists():
                 if self.auto_generate_id_card(student):
-                    created += 1
+                    created_count += 1
 
-        # Process teachers
-        for teacher in Teacher.objects.filter(institution=self.institution, is_active=True):
+        # Teachers
+        teachers = Teacher.objects.filter(institution=self.institution, is_active=True)
+        for teacher in teachers:
             if not IDCard.objects.filter(user=teacher.user, is_active=True).exists():
                 if self.auto_generate_id_card(teacher):
-                    created += 1
+                    created_count += 1
 
-        # Optionally process staff/admins
-        for user in CustomUser.objects.filter(institution=self.institution, is_active=True, is_staff=True):
-            if not IDCard.objects.filter(user=user, is_active=True).exists():
-                if self.auto_generate_id_card(user):
-                    created += 1
+        # Staff/Admins
+        staff_users = CustomUser.objects.filter(
+            institution=self.institution,
+            is_active=True,
+            is_staff=True
+        )
+        for staff in staff_users:
+            if not IDCard.objects.filter(user=staff, is_active=True).exists():
+                if self.auto_generate_id_card(staff):
+                    created_count += 1
 
-        return created
+        logger.info(f"Total new ID cards generated: {created_count}")
+        return created_count
 
-    def regenerate_on_update(self, user_profile):
+    def regenerate_on_update(self, user_profile) -> Optional[IDCard]:
         """
-        Triggered when key fields (e.g., photo, name, class) change.
-        Deactivates old card, creates new one.
+        Regenerates an ID card when critical profile info is updated.
+        Deactivates old card and creates a new one.
         """
-        IDCard.objects.filter(user=user_profile.user, is_active=True).update(is_active=False)
+        user = getattr(user_profile, 'user', user_profile)
+
+        existing_cards = IDCard.objects.filter(user=user, is_active=True)
+        if existing_cards.exists():
+            existing_cards.update(is_active=False)
+            logger.info(f"Deactivated existing ID cards for user {user.id}")
 
         return self.auto_generate_id_card(user_profile)

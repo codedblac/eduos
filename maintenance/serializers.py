@@ -7,7 +7,7 @@ from .models import (
     MaintenanceSchedule,
     MaintenanceStaff,
 )
-from accounts.serializers import UserPublicSerializer
+from accounts.serializers import UserSerializer
 
 
 class MaintenanceCategorySerializer(serializers.ModelSerializer):
@@ -26,7 +26,7 @@ class MaintenanceAssetSerializer(serializers.ModelSerializer):
 
 class MaintenanceRequestSerializer(serializers.ModelSerializer):
     asset_name = serializers.CharField(source='asset.name', read_only=True)
-    reported_by_info = UserPublicSerializer(source='reported_by', read_only=True)
+    reported_by_info = UserSerializer(source='reported_by', read_only=True)
 
     class Meta:
         model = MaintenanceRequest
@@ -36,7 +36,7 @@ class MaintenanceRequestSerializer(serializers.ModelSerializer):
 
 class MaintenanceLogSerializer(serializers.ModelSerializer):
     asset_name = serializers.CharField(source='asset.name', read_only=True)
-    performed_by_info = UserPublicSerializer(source='performed_by', read_only=True)
+    performed_by_info = UserSerializer(source='performed_by', read_only=True)
 
     class Meta:
         model = MaintenanceLog
@@ -52,7 +52,7 @@ class MaintenanceScheduleSerializer(serializers.ModelSerializer):
 
 
 class MaintenanceStaffSerializer(serializers.ModelSerializer):
-    user_info = UserPublicSerializer(source='user', read_only=True)
+    user_info = UserSerializer(source='user', read_only=True)
 
     class Meta:
         model = MaintenanceStaff

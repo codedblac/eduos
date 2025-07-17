@@ -11,7 +11,13 @@ from .models import (
 from students.models import Student
 from accounts.models import CustomUser
 
+from .models import MicroFeeAssignment 
 
+class MicroFeeAssignmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MicroFeeAssignment
+        fields = '__all__'
+        
 class WalletSerializer(serializers.ModelSerializer):
     student_name = serializers.SerializerMethodField()
 

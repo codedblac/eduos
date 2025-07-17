@@ -6,6 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from django.db.models import Sum, Q
 
+from rest_framework.views import APIView
 from .models import (
     FeeItem, FeeStructure, Invoice, InvoiceItem, Payment,
     Receipt, Penalty, BursaryAllocation, RefundRequest
@@ -140,3 +141,26 @@ class FeeSummaryView(generics.GenericAPIView):
             'total_arrears': total_billed - total_paid,
             'total_penalties': total_penalties
         })
+
+
+class FeeArrearsAnalyticsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        # Dummy logic – replace with real analytics
+        data = {
+            "total_students_with_arrears": 24,
+            "total_amount_due": 150000.00,
+        }
+        return Response(data)
+    
+class TopDebtorsAnalyticsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        # TODO: Replace this with actual logic using your Fee models
+        data = [
+            {"student_id": 1, "name": "John Doe", "amount_due": 5000},
+            {"student_id": 2, "name": "Jane Smith", "amount_due": 4700},
+        ]
+        return Response(data)

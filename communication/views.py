@@ -17,14 +17,14 @@ from .models import (
 )
 
 from .serializers import (
-    CommunicationAnnouncementSerializer,
+    CommunicationAnnouncementDetailSerializer,
     CommunicationTargetSerializer,
     CommunicationReadLogSerializer,
     CommunicationLogSerializer,
     AnnouncementCategorySerializer
 )
 
-from .permissions import IsAuthorOrAdmin
+from .permissions import IsAuthorOrReadOnly
 from .filters import CommunicationAnnouncementFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
@@ -38,13 +38,13 @@ class AnnouncementCategoryViewSet(viewsets.ModelViewSet):
 
 class CommunicationAnnouncementViewSet(viewsets.ModelViewSet):
     queryset = CommunicationAnnouncement.objects.all()
-    serializer_class = CommunicationAnnouncementSerializer
+    serializer_class = CommunicationAnnouncementDetailSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_class = CommunicationAnnouncementFilter
     search_fields = ['title', 'content', 'author__username', 'institution__name']
     ordering_fields = ['created_at', 'scheduled_at', 'expires_at']
     ordering = ['-created_at']
-    permission_classes = [IsAuthenticated, IsAuthorOrAdmin]
+    permission_classes = [IsAuthenticated, IsAuthorOrReadOnly]
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)

@@ -1,65 +1,59 @@
 from django.contrib import admin
 from .models import (
-    Department,
-    DepartmentUser,
-    Subject,
-    DepartmentAnnouncement,
-    DepartmentPerformanceNote,
-    DepartmentLeaveApproval
+    Department, DepartmentUser, DepartmentRoleAssignmentHistory,
+    Subject, DepartmentAnnouncement, DepartmentPerformanceNote,
+    DepartmentLeaveApproval, DepartmentMeeting, DepartmentKPI,
+    DepartmentBudget, DepartmentResource, DepartmentAuditLog,
+    DepartmentDocument, DepartmentGoal, DepartmentAnnualPlan,
+    DepartmentTask, DepartmentAnalyticsSnapshot
 )
 
 
 @admin.register(Department)
 class DepartmentAdmin(admin.ModelAdmin):
-    list_display = ('name', 'code', 'institution', 'type', 'is_academic', 'created_at')
+    list_display = ('name', 'institution', 'type', 'is_academic', 'created_at')
     list_filter = ('institution', 'type', 'is_academic')
-    search_fields = ('name', 'code', 'description')
-    ordering = ('name',)
+    search_fields = ('name', 'code', 'institution__name')
 
 
 @admin.register(DepartmentUser)
 class DepartmentUserAdmin(admin.ModelAdmin):
     list_display = ('user', 'department', 'role', 'is_active', 'assigned_on')
-    list_filter = ('role', 'is_active', 'department__institution')
-    search_fields = ('user__first_name', 'user__last_name', 'department__name')
-    ordering = ('department', 'role')
+    list_filter = ('role', 'is_active', 'department')
+    search_fields = ('user__username', 'user__first_name', 'user__last_name')
 
 
 @admin.register(Subject)
 class SubjectAdmin(admin.ModelAdmin):
-    list_display = (
-        'name',
-        'code',
-        'department',
-        'assigned_teacher',
-        'is_examable',
-        'is_mapped_to_timetable',
-        'is_linked_to_elearning'
-    )
-    list_filter = ('is_examable', 'is_mapped_to_timetable', 'is_linked_to_elearning', 'department__institution')
-    search_fields = ('name', 'code', 'description')
-    ordering = ('name',)
+    list_display = ('name', 'code', 'department', 'assigned_teacher', 'is_examable')
+    list_filter = ('department', 'is_examable', 'is_mapped_to_timetable')
+    search_fields = ('name', 'code', 'department__name')
 
 
-@admin.register(DepartmentAnnouncement)
-class DepartmentAnnouncementAdmin(admin.ModelAdmin):
-    list_display = ('title', 'department', 'created_by', 'created_at')
-    list_filter = ('department__institution', 'created_at')
-    search_fields = ('title', 'message')
-    ordering = ('-created_at',)
+@admin.register(DepartmentBudget)
+class DepartmentBudgetAdmin(admin.ModelAdmin):
+    list_display = ('department', 'fiscal_year', 'amount_allocated', 'amount_used')
+    list_filter = ('fiscal_year', 'department')
+    search_fields = ('department__name',)
 
 
-@admin.register(DepartmentPerformanceNote)
-class DepartmentPerformanceNoteAdmin(admin.ModelAdmin):
-    list_display = ('student', 'department', 'created_by', 'approved_by', 'created_at', 'approved')
-    list_filter = ('approved', 'department__institution', 'created_at')
-    search_fields = ('student__first_name', 'student__last_name', 'note')
-    ordering = ('-created_at',)
+@admin.register(DepartmentKPI)
+class DepartmentKPIAdmin(admin.ModelAdmin):
+    list_display = ('department', 'term', 'target', 'reviewed_by', 'reviewed_at')
+    list_filter = ('term', 'department')
+    search_fields = ('target',)
 
 
-@admin.register(DepartmentLeaveApproval)
-class DepartmentLeaveApprovalAdmin(admin.ModelAdmin):
-    list_display = ('staff_member', 'department', 'status', 'requested_at', 'approved_by', 'decision_date')
-    list_filter = ('status', 'department__institution', 'requested_at')
-    search_fields = ('staff_member__first_name', 'staff_member__last_name', 'reason')
-    ordering = ('-requested_at',)
+
+admin.site.register(DepartmentRoleAssignmentHistory)
+admin.site.register(DepartmentAnnouncement)
+admin.site.register(DepartmentPerformanceNote)
+admin.site.register(DepartmentLeaveApproval)
+admin.site.register(DepartmentMeeting)
+admin.site.register(DepartmentResource)
+admin.site.register(DepartmentAuditLog)
+admin.site.register(DepartmentDocument)
+admin.site.register(DepartmentGoal)
+admin.site.register(DepartmentAnnualPlan)
+admin.site.register(DepartmentTask)
+admin.site.register(DepartmentAnalyticsSnapshot)

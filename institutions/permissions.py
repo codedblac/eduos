@@ -84,3 +84,12 @@ class CanManageInstitutionData(permissions.BasePermission):
         if user.role == CustomUser.Role.SUPER_ADMIN:
             return True
         return hasattr(obj, 'institution') and obj.institution == user.institution
+
+
+class IsInstitutionMember(permissions.BasePermission):
+    """
+    Allows access only to users associated with an institution.
+    """
+
+    def has_permission(self, request, view):
+        return request.user and request.user.is_authenticated and hasattr(request.user, 'institution') and request.user.institution is not None

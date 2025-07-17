@@ -12,10 +12,10 @@ from .serializers import (
     LessonPlanSerializer, LessonScheduleSerializer, LessonSessionSerializer,
     LessonAttachmentSerializer, LessonScaffoldSuggestionSerializer
 )
-from .permissions import IsTeacherOrAdmin, IsOwnerOrReadOnly
+from .permissions import IsTeacherOrAdmin, IsLessonOwnerOrReadOnly
 from .filters import LessonPlanFilter, LessonScheduleFilter, LessonSessionFilter
-from .ai import LessonAIEngine
-from .analytics import LessonAnalyticsEngine
+from .ai import LessonAI
+from .analytics import LessonAnalytics
 
 
 # ----------------------------
@@ -38,12 +38,12 @@ class LessonPlanViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], url_path='coverage-alerts')
     def ai_coverage_alerts(self, request):
-        alerts = LessonAIEngine.detect_under_covered_topics()
+        alerts = LessonAI.detect_under_covered_topics()
         return Response(alerts, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], url_path='analytics-summary')
     def analytics_summary(self, request):
-        stats = LessonAnalyticsEngine.planning_summary()
+        stats = LessonAnalytics.planning_summary()
         return Response(stats, status=status.HTTP_200_OK)
 
 
@@ -64,7 +64,7 @@ class LessonSessionViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], url_path='analytics')
     def session_analytics(self, request):
-        stats = LessonAnalyticsEngine.session_analytics()
+        stats = LessonAnalytics.session_analytics()
         return Response(stats, status=status.HTTP_200_OK)
 
 
@@ -88,7 +88,7 @@ class LessonAISuggestionAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, lesson_plan_id):
-        suggestions = LessonAIEngine.suggest_for_lesson_plan_id(lesson_plan_id)
+        suggestions = LessonAI.suggest_for_lesson_plan_id(lesson_plan_id)
         return Response(suggestions)
 
 
@@ -96,7 +96,7 @@ class LessonCoverageAlertAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        alerts = LessonAIEngine.detect_under_covered_topics()
+        alerts = LessonAI.detect_under_covered_topics()
         return Response(alerts)
 
 
@@ -104,7 +104,7 @@ class LessonAnalyticsSummaryAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        data = LessonAnalyticsEngine.planning_summary()
+        data = LessonAnalytics.planning_summary()
         return Response(data)
 
 
@@ -112,7 +112,7 @@ class TeacherLessonAnalyticsAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, teacher_id):
-        stats = LessonAnalyticsEngine.teacher_lesson_stats(teacher_id)
+        stats = LessonAnalytics.teacher_lesson_stats(teacher_id)
         return Response(stats)
 
 
@@ -120,5 +120,5 @@ class InstitutionLessonAnalyticsAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, institution_id):
-        data = LessonAnalyticsEngine.institution_lesson_summary(institution_id)
+        data = LessonAnalytics.institution_lesson_summary(institution_id)
         return Response(data)

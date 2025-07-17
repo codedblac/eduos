@@ -16,6 +16,23 @@ class IsInstitutionAdminOrReadOnly(permissions.BasePermission):
         return hasattr(request.user, 'institution') and request.user.is_institution_admin
 
 
+class IsTeacherOrAdmin(permissions.BasePermission):
+    """
+    Custom permission to only allow users who are teachers or admins.
+    Assumes user roles are defined in user.role or a user.groups/permissions system.
+    """
+
+    def has_permission(self, request, view):
+        user = request.user
+        return (
+            user and user.is_authenticated and (
+                getattr(user, 'is_staff', False) or
+                getattr(user, 'is_superuser', False) or
+                getattr(user, 'role', '').lower() == 'teacher' or
+                'teacher' in [g.name.lower() for g in user.groups.all()]
+            )
+        )
+
 class IsLessonOwnerOrReadOnly(permissions.BasePermission):
     """
     Allow only the teacher who owns the lesson to edit it.

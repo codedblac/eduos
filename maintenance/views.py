@@ -10,7 +10,7 @@ from .models import (
     MaintenanceLog
 )
 from .serializers import (
-    EquipmentSerializer,
+    MaintenanceAssetSerializer,
     MaintenanceRequestSerializer,
     MaintenanceScheduleSerializer,
     MaintenanceLogSerializer
@@ -21,13 +21,13 @@ from .filters import (
     MaintenanceScheduleFilter,
     MaintenanceLogFilter
 )
-from .permissions import IsInstitutionStaffOrReadOnly
+from .permissions import IsMaintenanceAdmin
 
 
 class EquipmentViewSet(viewsets.ModelViewSet):
     queryset = Equipment.objects.all()
-    serializer_class = EquipmentSerializer
-    permission_classes = [permissions.IsAuthenticated, IsInstitutionStaffOrReadOnly]
+    serializer_class = MaintenanceAssetSerializer
+    permission_classes = [permissions.IsAuthenticated, IsMaintenanceAdmin]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_class = EquipmentFilter
     search_fields = ['name', 'type', 'location']
@@ -37,7 +37,7 @@ class EquipmentViewSet(viewsets.ModelViewSet):
 class MaintenanceRequestViewSet(viewsets.ModelViewSet):
     queryset = MaintenanceRequest.objects.all()
     serializer_class = MaintenanceRequestSerializer
-    permission_classes = [permissions.IsAuthenticated, IsInstitutionStaffOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated, IsMaintenanceAdmin]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_class = MaintenanceRequestFilter
     search_fields = ['equipment__name', 'description']
@@ -47,7 +47,7 @@ class MaintenanceRequestViewSet(viewsets.ModelViewSet):
 class MaintenanceScheduleViewSet(viewsets.ModelViewSet):
     queryset = MaintenanceSchedule.objects.all()
     serializer_class = MaintenanceScheduleSerializer
-    permission_classes = [permissions.IsAuthenticated, IsInstitutionStaffOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated, IsMaintenanceAdmin]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_class = MaintenanceScheduleFilter
     search_fields = ['equipment__name', 'frequency']
@@ -57,7 +57,7 @@ class MaintenanceScheduleViewSet(viewsets.ModelViewSet):
 class MaintenanceLogViewSet(viewsets.ModelViewSet):
     queryset = MaintenanceLog.objects.all()
     serializer_class = MaintenanceLogSerializer
-    permission_classes = [permissions.IsAuthenticated, IsInstitutionStaffOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated, IsMaintenanceAdmin]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_class = MaintenanceLogFilter
     search_fields = ['equipment__name', 'notes']

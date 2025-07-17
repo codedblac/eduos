@@ -11,7 +11,7 @@ from .serializers import (
     StudentHistorySerializer
 )
 from .permissions import IsInstitutionAdminOrStaff, IsReadOnlyOrInstitutionStaff
-from .filters import StudentFilter, MedicalFlagFilter
+from .filters import StudentFilter
 from .analytics import (
     get_class_level_distribution,
     get_stream_distribution,
@@ -66,7 +66,6 @@ class MedicalFlagViewSet(viewsets.ModelViewSet):
     serializer_class = MedicalFlagSerializer
     permission_classes = [permissions.IsAuthenticated, IsInstitutionAdminOrStaff]
     filter_backends = [DjangoFilterBackend, SearchFilter]
-    filterset_class = MedicalFlagFilter
     search_fields = ['condition', 'student__first_name', 'student__last_name']
 
     def get_queryset(self):

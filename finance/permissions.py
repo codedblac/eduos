@@ -1,75 +1,103 @@
-# finance/permissions.py
-
 from rest_framework import permissions
 
 SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS']
+
+# Define role groups once for clarity and reuse
+FINANCE_ADMIN_ROLES = ['admin', 'finance_head']
+ACCOUNTANT_ROLES = ['accountant', 'finance_clerk']
+AUDITOR_ROLES = ['auditor']
+INSTITUTION_STAFF_ROLES = ['admin', 'finance_head', 'accountant', 'auditor', 'principal', 'deputy']
+FINANCE_ROLES = FINANCE_ADMIN_ROLES + ACCOUNTANT_ROLES + AUDITOR_ROLES
 
 
 class IsFinanceAdmin(permissions.BasePermission):
     """
     Full access to all finance operations.
-    Intended for senior finance roles (e.g. Finance Director, School Admin).
     """
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role in ['admin', 'finance_head']
+        return request.user.is_authenticated and request.user.role in FINANCE_ADMIN_ROLES
 
 
 class IsAccountant(permissions.BasePermission):
     """
-    Can perform transactional finance operations (income, expense, refund).
+    Can perform transactional finance operations (income, expenses, waivers).
     """
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role in ['accountant', 'finance_clerk']
+        return request.user.is_authenticated and request.user.role in ACCOUNTANT_ROLES
 
 
 class IsAuditorOrReadOnly(permissions.BasePermission):
     """
-    Can view all finance data but not alter it.
-    Intended for external/internal audit roles.
+    Can view all finance data but not modify.
     """
     def has_permission(self, request, view):
         return request.user.is_authenticated and (
-            request.user.role == 'auditor' or request.method in SAFE_METHODS
+            request.user.role in AUDITOR_ROLES or request.method in SAFE_METHODS
         )
 
 
 class IsRefundApprover(permissions.BasePermission):
     """
-    Permission for those allowed to approve financial requests (e.g. waivers, refunds).
+    Can approve waivers, refunds, or other financial requests.
     """
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role in ['finance_head', 'admin']
+        return request.user.is_authenticated and request.user.role in FINANCE_ADMIN_ROLES
 
 
 class IsOwnerOrReadOnly(permissions.BasePermission):
     """
-    Object-level permission for students or guardians viewing their own finance info.
+    Allows students or guardians to view their own finance-related objects.
     """
     def has_object_permission(self, request, view, obj):
         if request.method in SAFE_METHODS:
             if hasattr(obj, 'student'):
                 student = obj.student
-                return student.user == request.user or student.guardians.filter(user=request.user).exists()
+                user = request.user
+                return (
+                    hasattr(student, 'user') and student.user == user
+                ) or (
+                    hasattr(student, 'guardians') and student.guardians.filter(user=user).exists()
+                )
         return False
 
 
 class IsInstitutionStaff(permissions.BasePermission):
     """
-    General permission for institutional staff with read access.
-    (e.g., principal, deputy, or system-linked support staff)
+    Read access for institutional leadership and finance staff.
     """
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role in [
-            'admin', 'finance_head', 'accountant', 'auditor', 'principal', 'deputy'
-        ]
+        return request.user.is_authenticated and request.user.role in INSTITUTION_STAFF_ROLES
 
 
 class IsFinanceRole(permissions.BasePermission):
     """
-    Generic finance access control for any finance-linked role.
-    Can be used when writing DRY custom views for shared access logic.
+    General permission for finance-related operations.
     """
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role in [
-            'admin', 'finance_head', 'accountant', 'finance_clerk', 'auditor'
-        ]
+        return request.user.is_authenticated and request.user.role in FINANCE_ROLES
+
+
+class IsFinanceClerkOrReadOnly(permissions.BasePermission):
+    """
+    Clerks can write; all others read-only.
+    """
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and (
+            request.user.role == 'finance_clerk' or request.method in SAFE_METHODS
+        )
+
+
+class IsBudgetEditor(permissions.BasePermission):
+    """
+    Only finance_head or admin can create or edit budgets.
+    """
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and request.user.role in ['finance_head', 'admin']
+
+
+class IsJournalPoster(permissions.BasePermission):
+    """
+    Only users with specific rights can post journal entries.
+    """
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and request.user.role in ['admin', 'accountant']

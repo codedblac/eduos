@@ -4,6 +4,7 @@ from accounts.models import CustomUser
 from students.models import Student
 from institutions.models import Institution
 
+User = CustomUser
 
 class AlumniProfile(models.Model):
     student = models.OneToOneField(Student, on_delete=models.CASCADE, related_name='alumni_profile')
@@ -34,6 +35,8 @@ class AlumniEvent(models.Model):
     created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True)
     institution = models.ForeignKey(Institution, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
+    is_virtual = models.BooleanField(default=False)
+    event_url = models.URLField(blank=True)
 
     def __str__(self):
         return self.title
@@ -55,6 +58,8 @@ class AlumniDonation(models.Model):
     purpose = models.CharField(max_length=255, blank=True)
     donated_on = models.DateTimeField(auto_now_add=True)
     receipt_number = models.CharField(max_length=100, blank=True)
+    payment_method = models.CharField(max_length=50, blank=True)  # e.g., Mobile Money, Card
+    campaign_name = models.CharField(max_length=255, blank=True)
     institution = models.ForeignKey(Institution, on_delete=models.CASCADE)
 
     def __str__(self):
@@ -67,6 +72,8 @@ class AlumniMentorship(models.Model):
     start_date = models.DateField(default=timezone.now)
     status = models.CharField(max_length=20, choices=[('active', 'Active'), ('ended', 'Ended')], default='active')
     notes = models.TextField(blank=True)
+    meeting_frequency = models.CharField(max_length=100, blank=True)
+    communication_channel = models.CharField(max_length=100, blank=True)  # e.g., Zoom, Phone
     institution = models.ForeignKey(Institution, on_delete=models.CASCADE)
 
     class Meta:
@@ -95,6 +102,7 @@ class AlumniNotification(models.Model):
         ('donation', 'Donation'),
         ('announcement', 'Announcement'),
         ('mentorship', 'Mentorship'),
+        ('job', 'Job Opportunity')
     ])
     is_read = models.BooleanField(default=False)
     institution = models.ForeignKey(Institution, on_delete=models.CASCADE)
@@ -114,6 +122,7 @@ class AlumniMembership(models.Model):
     membership_paid_on = models.DateField(null=True, blank=True)
     next_due_date = models.DateField(null=True, blank=True)
     membership_number = models.CharField(max_length=100, unique=True)
+    membership_tier = models.CharField(max_length=100, blank=True)  # e.g., Gold, Silver
     institution = models.ForeignKey(Institution, on_delete=models.CASCADE)
 
     def __str__(self):
@@ -137,11 +146,37 @@ class AlumniEmployment(models.Model):
 
 class AlumniVolunteer(models.Model):
     alumni = models.ForeignKey(AlumniProfile, on_delete=models.CASCADE)
-    area_of_interest = models.CharField(max_length=255)  # e.g., Mentoring, Speaking, Event Support
+    area_of_interest = models.CharField(max_length=255)
     notes = models.TextField(blank=True)
-    availability = models.CharField(max_length=100, blank=True)  # e.g., Weekends only
+    availability = models.CharField(max_length=100, blank=True)
     registered_on = models.DateTimeField(auto_now_add=True)
     institution = models.ForeignKey(Institution, on_delete=models.CASCADE)
 
     def __str__(self):
         return f"{self.alumni.student.full_name()} - {self.area_of_interest}"
+
+
+class AlumniJobOpportunity(models.Model):
+    posted_by = models.ForeignKey(AlumniProfile, on_delete=models.SET_NULL, null=True, related_name='posted_jobs')
+    title = models.CharField(max_length=255)
+    description = models.TextField()
+    company_name = models.CharField(max_length=255)
+    location = models.CharField(max_length=255)
+    link_to_apply = models.URLField(blank=True)
+    posted_on = models.DateTimeField(auto_now_add=True)
+    expires_on = models.DateField(null=True, blank=True)
+    institution = models.ForeignKey(Institution, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return f"{self.title} at {self.company_name}"
+
+
+class AlumniTestimonial(models.Model):
+    alumni = models.ForeignKey(AlumniProfile, on_delete=models.CASCADE, related_name='testimonials')
+    message = models.TextField()
+    approved = models.BooleanField(default=False)
+    submitted_on = models.DateTimeField(auto_now_add=True)
+    institution = models.ForeignKey(Institution, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return f"Testimonial from {self.alumni.student.full_name()}"

@@ -6,7 +6,7 @@ from channels.layers import get_channel_layer
 from uuid import uuid4
 import json
 
-from .models import ChatRoom, ChatMessage, ChatRoomMembership, PinnedMessage, ReadReceipt
+from .models import ChatRoom, ChatMessage, ChatRoomMembership, ChatMessage, MessageReadReceipt
 
 User = get_user_model()
 
@@ -69,7 +69,7 @@ def mark_read(user, message):
     """
     Create or update a read receipt.
     """
-    receipt, created = ReadReceipt.objects.update_or_create(
+    receipt, created = MessageReadReceipt.objects.update_or_create(
         message=message,
         user=user,
         defaults={"read_at": timezone.now()}
@@ -81,7 +81,7 @@ def pin_message(message):
     """
     Pin a message in a room.
     """
-    pinned, created = PinnedMessage.objects.get_or_create(
+    pinned, created = ChatMessage.objects.get_or_create(
         message=message,
         room=message.room
     )

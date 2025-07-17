@@ -131,3 +131,11 @@ def generate_admission_summary_for_review():
         "with_chronic_illness": chronic,
         "orphans": orphaned,
     }
+
+def recommend_admission_status(application):
+    if application.average_score >= 85 and application.age <= 20:
+        return "Accepted"
+    elif application.average_score >= 70:
+        return "Waitlisted"
+    else:
+        return "Rejected"

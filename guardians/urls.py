@@ -4,7 +4,7 @@ from .views import (
     GuardianViewSet,
     GuardianStudentLinkViewSet,
     GuardianNotificationViewSet,
-    GuardianAnalyticsView
+    GuardianAnalyticsView,
 )
 
 router = DefaultRouter()
@@ -13,9 +13,6 @@ router.register(r'student-links', GuardianStudentLinkViewSet, basename='guardian
 router.register(r'notifications', GuardianNotificationViewSet, basename='guardian-notification')
 
 urlpatterns = [
-    # ViewSet-based routes from router
     path('', include(router.urls)),
-
-    # Standalone analytics view
     path('analytics/detail/', GuardianAnalyticsView.as_view(), name='guardian-analytics-detail'),
 ]

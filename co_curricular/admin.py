@@ -1,28 +1,40 @@
 from django.contrib import admin
-
-# Register your models here.
-from django.contrib import admin
 from .models import (
-    ActivityCategory, Activity, StudentActivityParticipation, ActivityEvent,
-    StudentAward, StudentReflection, ActivitySession, ActivityAttendance,
-    TalentRecommendation
+    ActivityCategory,
+    Activity,
+    StudentActivityParticipation,
+    ActivityEvent,
+    StudentAward,
+    StudentReflection,
+    ActivitySession,
+    ActivityAttendance,
+    TalentRecommendation,
+    StudentProfile,
+    CoachFeedback,
+    ActivityPerformance,
+    CoachAssignmentHistory
 )
 
-
-# Inline for participations in Activity
+# Inlines
 class StudentActivityParticipationInline(admin.TabularInline):
     model = StudentActivityParticipation
     extra = 0
     readonly_fields = ('joined_on',)
 
 
-# Inline for ActivitySessions within an Activity
 class ActivitySessionInline(admin.TabularInline):
     model = ActivitySession
     extra = 0
     readonly_fields = ('created_by',)
 
 
+class ActivityAttendanceInline(admin.TabularInline):
+    model = ActivityAttendance
+    extra = 0
+    autocomplete_fields = ('student',)
+
+
+# Admin registrations
 @admin.register(ActivityCategory)
 class ActivityCategoryAdmin(admin.ModelAdmin):
     list_display = ('name', 'category_type', 'institution', 'is_active')
@@ -40,10 +52,18 @@ class ActivityAdmin(admin.ModelAdmin):
     autocomplete_fields = ('category', 'coach_or_patron', 'institution')
 
 
+@admin.register(StudentProfile)
+class StudentProfileAdmin(admin.ModelAdmin):
+    list_display = ('student', 'created_at', 'updated_at')
+    search_fields = ('student__user__username', 'interests', 'long_term_goals')
+    autocomplete_fields = ('student',)
+    filter_horizontal = ('preferred_categories',)
+
+
 @admin.register(StudentActivityParticipation)
 class StudentActivityParticipationAdmin(admin.ModelAdmin):
-    list_display = ('student', 'activity', 'joined_on', 'skill_level', 'is_active')
-    list_filter = ('skill_level', 'is_active', 'joined_on')
+    list_display = ('student', 'activity', 'joined_on', 'skill_level', 'status', 'is_active')
+    list_filter = ('skill_level', 'status', 'is_active', 'joined_on')
     search_fields = ('student__user__username', 'activity__name', 'notes')
     autocomplete_fields = ('student', 'activity')
 
@@ -58,25 +78,18 @@ class ActivityEventAdmin(admin.ModelAdmin):
 
 @admin.register(StudentAward)
 class StudentAwardAdmin(admin.ModelAdmin):
-    list_display = ('title', 'student', 'activity', 'level', 'date_awarded')
-    list_filter = ('level', 'date_awarded', 'activity__category')
+    list_display = ('title', 'student', 'activity', 'level', 'date_awarded', 'status')
+    list_filter = ('level', 'status', 'date_awarded', 'activity__category')
     search_fields = ('title', 'description', 'student__user__username')
     autocomplete_fields = ('student', 'activity')
 
 
 @admin.register(StudentReflection)
 class StudentReflectionAdmin(admin.ModelAdmin):
-    list_display = ('participation', 'author', 'date')
-    list_filter = ('date', 'author')
+    list_display = ('participation', 'author', 'date', 'status')
+    list_filter = ('date', 'author', 'status')
     search_fields = ('reflection', 'participation__student__user__username')
     autocomplete_fields = ('participation', 'author')
-
-
-# Inline attendance inside a session
-class ActivityAttendanceInline(admin.TabularInline):
-    model = ActivityAttendance
-    extra = 0
-    autocomplete_fields = ('student',)
 
 
 @admin.register(ActivitySession)
@@ -98,7 +111,31 @@ class ActivityAttendanceAdmin(admin.ModelAdmin):
 
 @admin.register(TalentRecommendation)
 class TalentRecommendationAdmin(admin.ModelAdmin):
-    list_display = ('student', 'area', 'recommended_date', 'suggested_by')
-    list_filter = ('area', 'recommended_date')
+    list_display = ('student', 'area', 'recommended_date', 'suggested_by', 'status')
+    list_filter = ('area', 'recommended_date', 'status')
     search_fields = ('student__user__username', 'area', 'notes')
     autocomplete_fields = ('student', 'suggested_by')
+
+
+@admin.register(CoachFeedback)
+class CoachFeedbackAdmin(admin.ModelAdmin):
+    list_display = ('participation', 'coach', 'date', 'rating')
+    list_filter = ('coach', 'date')
+    search_fields = ('feedback', 'participation__student__user__username')
+    autocomplete_fields = ('participation', 'coach')
+
+
+@admin.register(ActivityPerformance)
+class ActivityPerformanceAdmin(admin.ModelAdmin):
+    list_display = ('participation', 'date', 'score', 'rating')
+    list_filter = ('date',)
+    search_fields = ('comments', 'participation__student__user__username')
+    autocomplete_fields = ('participation',)
+
+
+@admin.register(CoachAssignmentHistory)
+class CoachAssignmentHistoryAdmin(admin.ModelAdmin):
+    list_display = ('activity', 'coach', 'assigned_on', 'ended_on')
+    list_filter = ('assigned_on', 'ended_on')
+    search_fields = ('activity__name', 'coach__username')
+    autocomplete_fields = ('activity', 'coach')

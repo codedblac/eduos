@@ -92,6 +92,7 @@ INSTALLED_APPS = [
     'fee_management',
     'e_wallet',
     'access_control',
+    'audit_logs',
     
     
     

@@ -1,13 +1,17 @@
 import django_filters
 from django_filters import rest_framework as filters
-
 from .models import (
     Income, Expense, Refund, Waiver, Budget, WalletTransaction,
-    StudentFinanceSnapshot, AnomalyFlag, ScholarshipCandidate
+    StudentFinanceSnapshot, AnomalyFlag, ScholarshipCandidate,
+    StudentInvoice, TransactionLog, ApprovalRequest,
+    RecurringTransaction, JournalEntry, AuditTrail, FinanceNotification
 )
 from academics.models import AcademicYear, Term
 from students.models import Student
 from institutions.models import Institution
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
 
 
 class IncomeFilter(filters.FilterSet):
@@ -37,10 +41,6 @@ class ExpenseFilter(filters.FilterSet):
 
 
 class BudgetFilter(filters.FilterSet):
-    institution = filters.ModelChoiceFilter(queryset=Institution.objects.all())
-    academic_year = filters.ModelChoiceFilter(queryset=AcademicYear.objects.all())
-    term = filters.ModelChoiceFilter(queryset=Term.objects.all())
-
     class Meta:
         model = Budget
         fields = ['institution', 'academic_year', 'term']
@@ -58,8 +58,6 @@ class RefundFilter(filters.FilterSet):
 
 class WaiverFilter(filters.FilterSet):
     student = filters.ModelChoiceFilter(queryset=Student.objects.all())
-    academic_year = filters.ModelChoiceFilter(queryset=AcademicYear.objects.all())
-    term = filters.ModelChoiceFilter(queryset=Term.objects.all())
 
     class Meta:
         model = Waiver
@@ -77,9 +75,6 @@ class WalletTransactionFilter(filters.FilterSet):
 
 
 class StudentFinanceSnapshotFilter(filters.FilterSet):
-    academic_year = filters.ModelChoiceFilter(queryset=AcademicYear.objects.all())
-    term = filters.ModelChoiceFilter(queryset=Term.objects.all())
-    student = filters.ModelChoiceFilter(queryset=Student.objects.all())
     min_balance = filters.NumberFilter(field_name="balance", lookup_expr="gte")
     max_balance = filters.NumberFilter(field_name="balance", lookup_expr="lte")
 
@@ -99,12 +94,75 @@ class AnomalyFlagFilter(filters.FilterSet):
 
 
 class ScholarshipCandidateFilter(filters.FilterSet):
-    academic_year = filters.ModelChoiceFilter(queryset=AcademicYear.objects.all())
-    recommended_by_ai = filters.BooleanFilter()
-    student = filters.ModelChoiceFilter(queryset=Student.objects.all())
     min_score = filters.NumberFilter(field_name='score', lookup_expr='gte')
     max_score = filters.NumberFilter(field_name='score', lookup_expr='lte')
+    min_need_score = filters.NumberFilter(field_name='need_score', lookup_expr='gte')
+    max_need_score = filters.NumberFilter(field_name='need_score', lookup_expr='lte')
 
     class Meta:
         model = ScholarshipCandidate
-        fields = ['academic_year', 'recommended_by_ai', 'student', 'min_score', 'max_score']
+        fields = ['academic_year', 'recommended_by_ai', 'student', 'min_score', 'max_score', 'min_need_score', 'max_need_score']
+
+
+class StudentInvoiceFilter(filters.FilterSet):
+    due_before = filters.DateFilter(field_name='due_date', lookup_expr='lte')
+    due_after = filters.DateFilter(field_name='due_date', lookup_expr='gte')
+    status = filters.CharFilter(lookup_expr='iexact')
+    invoice_number = filters.CharFilter(lookup_expr='icontains')
+
+    class Meta:
+        model = StudentInvoice
+        fields = ['student', 'academic_year', 'term', 'status', 'due_before', 'due_after', 'invoice_number']
+
+
+class TransactionLogFilter(filters.FilterSet):
+    date_range = filters.DateFromToRangeFilter(field_name='timestamp')
+    actor = filters.ModelChoiceFilter(queryset=User.objects.all())
+
+    class Meta:
+        model = TransactionLog
+        fields = ['action', 'actor', 'date_range']
+
+
+class ApprovalRequestFilter(filters.FilterSet):
+    status = filters.ChoiceFilter(choices=ApprovalRequest._meta.get_field('status').choices)
+    date_range = filters.DateFromToRangeFilter(field_name='requested_on')
+
+    class Meta:
+        model = ApprovalRequest
+        fields = ['request_type', 'status', 'requested_by', 'approved_by', 'date_range']
+
+
+class RecurringTransactionFilter(filters.FilterSet):
+    type = filters.ChoiceFilter(choices=RecurringTransaction._meta.get_field('type').choices)
+    frequency = filters.ChoiceFilter(choices=RecurringTransaction._meta.get_field('frequency').choices)
+    next_run_range = filters.DateFromToRangeFilter(field_name='next_run')
+
+    class Meta:
+        model = RecurringTransaction
+        fields = ['type', 'frequency', 'active', 'next_run_range']
+
+
+class JournalEntryFilter(filters.FilterSet):
+    date_range = filters.DateFromToRangeFilter(field_name='date')
+    posted_by = filters.ModelChoiceFilter(queryset=User.objects.all())
+
+    class Meta:
+        model = JournalEntry
+        fields = ['debit_account', 'credit_account', 'posted_by', 'date_range']
+
+
+class AuditTrailFilter(filters.FilterSet):
+    date_range = filters.DateFromToRangeFilter(field_name='timestamp')
+
+    class Meta:
+        model = AuditTrail
+        fields = ['model_name', 'action', 'performed_by', 'date_range']
+
+
+class FinanceNotificationFilter(filters.FilterSet):
+    date_range = filters.DateFromToRangeFilter(field_name='created_at')
+
+    class Meta:
+        model = FinanceNotification
+        fields = ['recipient', 'read', 'date_range']

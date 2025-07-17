@@ -1,14 +1,14 @@
 from django.contrib import admin
-
-# Register your models here.
-from django.contrib import admin
 from .models import (
-    Course, CourseChapter, Lesson,
+    Course, CourseChapter, Lesson, LessonDiscussion, LessonAccessControl,
     CourseEnrollment, CourseCohortLink, LiveClassSession,
     Assignment, AssignmentSubmission,
     Quiz, QuizQuestion, QuizSubmission,
     CourseAnnouncement, Message, MessageThread,
-    StudentLessonProgress, TeacherActivityLog, AIPredictedScore
+    StudentLessonProgress, TeacherActivityLog, AIPredictedScore,
+    CourseCompletion, CourseReview,
+    LessonDownloadLog, CourseTranslation, PlagiarismReport,
+    InstructorProfile, Badge, StudentBadge, CourseMetadata
 )
 
 class ChapterInline(admin.TabularInline):
@@ -21,7 +21,7 @@ class LessonInline(admin.TabularInline):
 
 @admin.register(Course)
 class CourseAdmin(admin.ModelAdmin):
-    list_display = ('title', 'subject', 'institution', 'created_by', 'is_published')
+    list_display = ('title', 'subject', 'institution', 'created_by', 'is_published', 'is_featured')
     list_filter = ('is_published', 'is_featured', 'institution')
     search_fields = ('title', 'description')
     inlines = [ChapterInline]
@@ -34,9 +34,19 @@ class CourseChapterAdmin(admin.ModelAdmin):
 
 @admin.register(Lesson)
 class LessonAdmin(admin.ModelAdmin):
-    list_display = ('title', 'chapter', 'lesson_type', 'order')
+    list_display = ('title', 'chapter', 'lesson_type', 'order', 'is_downloadable')
     list_filter = ('lesson_type',)
     search_fields = ('title',)
+
+@admin.register(LessonDiscussion)
+class LessonDiscussionAdmin(admin.ModelAdmin):
+    list_display = ('lesson', 'user', 'created_at', 'edited_at')
+    search_fields = ('comment',)
+
+@admin.register(LessonAccessControl)
+class LessonAccessControlAdmin(admin.ModelAdmin):
+    list_display = ('lesson',)
+    search_fields = ('lesson__title',)
 
 @admin.register(CourseEnrollment)
 class EnrollmentAdmin(admin.ModelAdmin):
@@ -55,7 +65,7 @@ class LiveClassAdmin(admin.ModelAdmin):
 
 @admin.register(Assignment)
 class AssignmentAdmin(admin.ModelAdmin):
-    list_display = ('title', 'course', 'due_date')
+    list_display = ('title', 'course', 'due_date', 'created_by')
     list_filter = ('course',)
 
 @admin.register(AssignmentSubmission)
@@ -103,3 +113,41 @@ class ActivityLogAdmin(admin.ModelAdmin):
 @admin.register(AIPredictedScore)
 class AIPredictedScoreAdmin(admin.ModelAdmin):
     list_display = ('student', 'course', 'predicted_score', 'generated_at')
+
+@admin.register(CourseCompletion)
+class CourseCompletionAdmin(admin.ModelAdmin):
+    list_display = ('student', 'course', 'completed_at', 'certificate_issued')
+
+@admin.register(CourseReview)
+class CourseReviewAdmin(admin.ModelAdmin):
+    list_display = ('course', 'student', 'rating', 'submitted_at')
+
+@admin.register(LessonDownloadLog)
+class LessonDownloadLogAdmin(admin.ModelAdmin):
+    list_display = ('student', 'lesson', 'downloaded_at')
+
+@admin.register(CourseTranslation)
+class CourseTranslationAdmin(admin.ModelAdmin):
+    list_display = ('course', 'language_code', 'translated_title')
+
+@admin.register(PlagiarismReport)
+class PlagiarismReportAdmin(admin.ModelAdmin):
+    list_display = ('submission', 'similarity_score', 'checked_at')
+
+@admin.register(InstructorProfile)
+class InstructorProfileAdmin(admin.ModelAdmin):
+    list_display = ('user', 'expertise')
+    search_fields = ('expertise',)
+
+@admin.register(Badge)
+class BadgeAdmin(admin.ModelAdmin):
+    list_display = ('title',)
+    search_fields = ('title',)
+
+@admin.register(StudentBadge)
+class StudentBadgeAdmin(admin.ModelAdmin):
+    list_display = ('student', 'badge', 'awarded_at')
+
+@admin.register(CourseMetadata)
+class CourseMetadataAdmin(admin.ModelAdmin):
+    list_display = ('course',)

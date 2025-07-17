@@ -3,23 +3,18 @@ from .views import (
     ELibraryResourceListCreateView,
     ELibraryResourceDetailView,
     MyELibraryResourcesView,
-    PublicELibraryResourcesView,
-    ELibraryAIInsightsView,
+    PublicELibraryListView,
+    ResourceViewLogCreateView,
+    ELibraryAIInsightsAPIView,
+    ELibraryAnalyticsAPIView,
 )
 
 urlpatterns = [
-    # Admins & Teachers: List or upload institutional resources
     path('resources/', ELibraryResourceListCreateView.as_view(), name='elibrary-list-create'),
-
-    # Detail view for updating/deleting a resource
     path('resources/<uuid:pk>/', ELibraryResourceDetailView.as_view(), name='elibrary-detail'),
-
-    # Teachers & Students: See resources in their institution
     path('resources/my/', MyELibraryResourcesView.as_view(), name='elibrary-my-resources'),
-
-    # Everyone: Public (open-access) e-library resources
-    path('resources/public/', PublicELibraryResourcesView.as_view(), name='elibrary-public-resources'),
-
-    # AI Analysis Endpoint
-    path('resources/ai/insights/', ELibraryAIInsightsView.as_view(), name='elibrary-ai-insights'),
+    path('resources/public/', PublicELibraryListView.as_view(), name='elibrary-public-resources'),
+    path('resources/ai/insights/', ELibraryAIInsightsAPIView.as_view(), name='elibrary-ai-insights'),
+    path('resources/analytics/', ELibraryAnalyticsAPIView.as_view(), name='elibrary-analytics'),
+    path('resources/view-log/', ResourceViewLogCreateView.as_view(), name='elibrary-view-log'),
 ]

@@ -14,7 +14,7 @@ from .serializers import (
     AllowanceSerializer, DeductionSerializer, SalaryAdvanceRequestSerializer
 )
 from .permissions import (
-    IsHRManager, IsFinanceManager, IsStaffOrReadOnly
+    IsHR, IsFinance, IsSelfOrReadOnly
 )
 from .filters import (
     PayrollProfileFilter, PayrollRunFilter, PayslipFilter,
@@ -27,7 +27,7 @@ from .ai import PayrollAIEngine
 class PayrollProfileViewSet(viewsets.ModelViewSet):
     queryset = PayrollProfile.objects.select_related('staff_profile', 'staff_profile__department').all()
     serializer_class = PayrollProfileSerializer
-    permission_classes = [permissions.IsAuthenticated, IsHRManager]
+    permission_classes = [permissions.IsAuthenticated, IsHR]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_class = PayrollProfileFilter
     search_fields = ['staff_profile__user__first_name', 'staff_profile__user__last_name', 'staff_profile__designation']
@@ -36,12 +36,12 @@ class PayrollProfileViewSet(viewsets.ModelViewSet):
 class PayrollRunViewSet(viewsets.ModelViewSet):
     queryset = PayrollRun.objects.prefetch_related('payslips').all()
     serializer_class = PayrollRunSerializer
-    permission_classes = [permissions.IsAuthenticated, IsFinanceManager]
+    permission_classes = [permissions.IsAuthenticated, IsFinance]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_class = PayrollRunFilter
     ordering_fields = ['period_start', 'period_end', 'processed_on']
 
-    @action(detail=True, methods=['post'], permission_classes=[IsFinanceManager])
+    @action(detail=True, methods=['post'], permission_classes=[IsFinance])
     def lock(self, request, pk=None):
         run = self.get_object()
         run.is_locked = True
@@ -64,7 +64,7 @@ class PayrollRunViewSet(viewsets.ModelViewSet):
 class PayslipViewSet(viewsets.ModelViewSet):
     queryset = Payslip.objects.select_related('staff_profile', 'payroll_run').all()
     serializer_class = PayslipSerializer
-    permission_classes = [permissions.IsAuthenticated, IsStaffOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated, IsSelfOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_class = PayslipFilter
     search_fields = ['staff_profile__user__first_name', 'staff_profile__user__last_name']
@@ -78,7 +78,7 @@ class PayslipViewSet(viewsets.ModelViewSet):
 class AllowanceViewSet(viewsets.ModelViewSet):
     queryset = Allowance.objects.select_related('staff_profile').all()
     serializer_class = AllowanceSerializer
-    permission_classes = [permissions.IsAuthenticated, IsHRManager]
+    permission_classes = [permissions.IsAuthenticated, IsHR]
     filter_backends = [DjangoFilterBackend]
     filterset_class = AllowanceFilter
 
@@ -86,7 +86,7 @@ class AllowanceViewSet(viewsets.ModelViewSet):
 class DeductionViewSet(viewsets.ModelViewSet):
     queryset = Deduction.objects.select_related('staff_profile').all()
     serializer_class = DeductionSerializer
-    permission_classes = [permissions.IsAuthenticated, IsHRManager]
+    permission_classes = [permissions.IsAuthenticated, IsHR]
     filter_backends = [DjangoFilterBackend]
     filterset_class = DeductionFilter
 
@@ -94,18 +94,18 @@ class DeductionViewSet(viewsets.ModelViewSet):
 class SalaryAdvanceRequestViewSet(viewsets.ModelViewSet):
     queryset = SalaryAdvanceRequest.objects.select_related('staff_profile').all()
     serializer_class = SalaryAdvanceRequestSerializer
-    permission_classes = [permissions.IsAuthenticated, IsStaffOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated, IsSelfOrReadOnly]
     filter_backends = [DjangoFilterBackend]
     filterset_class = SalaryAdvanceRequestFilter
 
-    @action(detail=True, methods=['post'], permission_classes=[IsFinanceManager])
+    @action(detail=True, methods=['post'], permission_classes=[IsFinance])
     def approve(self, request, pk=None):
         advance = self.get_object()
         advance.status = SalaryAdvanceRequest.APPROVED
         advance.save()
         return Response({'status': 'Advance approved'})
 
-    @action(detail=True, methods=['post'], permission_classes=[IsFinanceManager])
+    @action(detail=True, methods=['post'], permission_classes=[IsFinance])
     def reject(self, request, pk=None):
         advance = self.get_object()
         advance.status = SalaryAdvanceRequest.REJECTED

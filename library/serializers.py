@@ -1,12 +1,12 @@
-# library/serializers.py
-
 from rest_framework import serializers
 from django.utils import timezone
 from .models import (
     BookCategory, Book, BookCopy, BorrowTransaction, Fine,
-    Vendor, Acquisition, BookIssueReport, BookRating, BookUsageStat
+    Vendor, Acquisition, BookIssueReport, BookRating, BookUsageStat,
+    LibraryMember, BookRequest, BookRecommendation, LibraryAuditLog
 )
 from django.contrib.auth import get_user_model
+from institutions.serializers import InstitutionSerializer
 
 User = get_user_model()
 
@@ -23,6 +23,7 @@ class BookSerializer(serializers.ModelSerializer):
     category_id = serializers.PrimaryKeyRelatedField(
         queryset=BookCategory.objects.all(), write_only=True, source='category'
     )
+    institution = InstitutionSerializer(read_only=True)
     available_copies = serializers.SerializerMethodField()
     total_copies = serializers.SerializerMethodField()
     average_rating = serializers.SerializerMethodField()
@@ -33,6 +34,7 @@ class BookSerializer(serializers.ModelSerializer):
             'id', 'institution', 'title', 'author', 'isbn', 'publisher',
             'publication_year', 'edition', 'language', 'summary', 'cover_image',
             'category', 'category_id', 'available_copies', 'total_copies', 'average_rating',
+            'is_active', 'created_at', 'updated_at'
         ]
 
     def get_available_copies(self, obj):
@@ -49,15 +51,14 @@ class BookSerializer(serializers.ModelSerializer):
 # === Book Copy ===
 class BookCopySerializer(serializers.ModelSerializer):
     book = BookSerializer(read_only=True)
-    book_id = serializers.PrimaryKeyRelatedField(
-        queryset=Book.objects.all(), write_only=True, source='book'
-    )
+    book_id = serializers.PrimaryKeyRelatedField(queryset=Book.objects.all(), write_only=True, source='book')
 
     class Meta:
         model = BookCopy
         fields = [
-            'id', 'book', 'book_id', 'accession_number', 'is_available',
-            'is_damaged', 'is_lost', 'location', 'created_at', 'updated_at'
+            'id', 'book', 'book_id', 'accession_number', 'barcode', 'rfid_tag',
+            'is_available', 'is_damaged', 'is_lost', 'condition_notes', 'location',
+            'acquired_on', 'created_at', 'updated_at'
         ]
 
 
@@ -77,7 +78,8 @@ class BorrowTransactionSerializer(serializers.ModelSerializer):
         model = BorrowTransaction
         fields = [
             'id', 'user', 'user_id', 'book_copy', 'book_copy_id',
-            'borrowed_on', 'due_date', 'returned_on', 'is_overdue'
+            'borrowed_on', 'due_date', 'returned_on', 'is_overdue',
+            'is_renewed', 'renewed_times', 'fine_applied'
         ]
 
     def get_is_overdue(self, obj):
@@ -92,7 +94,7 @@ class FineSerializer(serializers.ModelSerializer):
     class Meta:
         model = Fine
         fields = [
-            'id', 'transaction', 'transaction_id', 'amount', 'paid', 'paid_on'
+            'id', 'transaction', 'transaction_id', 'amount', 'paid', 'paid_on', 'waived', 'waived_by'
         ]
 
 
@@ -116,7 +118,7 @@ class AcquisitionSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'book', 'book_id', 'vendor', 'vendor_id',
             'quantity', 'price_per_unit', 'acquisition_date',
-            'funding_source', 'total_cost'
+            'funding_source', 'total_cost', 'procurement_status', 'approved_by'
         ]
 
     def get_total_cost(self, obj):
@@ -134,7 +136,8 @@ class BookIssueReportSerializer(serializers.ModelSerializer):
         model = BookIssueReport
         fields = [
             'id', 'book_copy', 'book_copy_id', 'reported_by', 'reported_by_id',
-            'issue_type', 'description', 'reported_on', 'resolved', 'resolved_on'
+            'issue_type', 'description', 'reported_on', 'resolved', 'resolved_on',
+            'assigned_to', 'action_taken'
         ]
 
 
@@ -152,7 +155,7 @@ class BookRatingSerializer(serializers.ModelSerializer):
         ]
 
 
-# === Book Usage Stats (AI/Analytics) ===
+# === Book Usage Stats ===
 class BookUsageStatSerializer(serializers.ModelSerializer):
     book = BookSerializer(read_only=True)
     book_id = serializers.PrimaryKeyRelatedField(queryset=Book.objects.all(), write_only=True, source='book')
@@ -161,6 +164,50 @@ class BookUsageStatSerializer(serializers.ModelSerializer):
         model = BookUsageStat
         fields = [
             'id', 'book', 'book_id', 'date',
-            'borrow_count', 'search_count', 'recommendation_score'
+            'borrow_count', 'search_count', 'recommendation_score', 'average_rating', 'unique_borrowers_count'
         ]
         read_only_fields = ['recommendation_score']
+
+
+# === Library Member ===
+class LibraryMemberSerializer(serializers.ModelSerializer):
+    user = serializers.StringRelatedField(read_only=True)
+    user_id = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), write_only=True, source='user')
+    institution = InstitutionSerializer(read_only=True)
+
+    class Meta:
+        model = LibraryMember
+        fields = [
+            'id', 'user', 'user_id', 'institution', 'membership_type',
+            'membership_id', 'profile_picture', 'joined_at', 'is_active',
+            'max_books_allowed', 'membership_expiry_date'
+        ]
+
+
+# === Book Request ===
+class BookRequestSerializer(serializers.ModelSerializer):
+    requested_by = serializers.StringRelatedField(read_only=True)
+    requested_by_id = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), write_only=True, source='requested_by')
+
+    class Meta:
+        model = BookRequest
+        fields = '__all__'
+
+
+# === Book Recommendation ===
+class BookRecommendationSerializer(serializers.ModelSerializer):
+    recommended_by = serializers.StringRelatedField(read_only=True)
+    recommended_by_id = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), write_only=True, source='recommended_by')
+
+    class Meta:
+        model = BookRecommendation
+        fields = '__all__'
+
+
+# === Audit Log ===
+class LibraryAuditLogSerializer(serializers.ModelSerializer):
+    user = serializers.StringRelatedField(read_only=True)
+
+    class Meta:
+        model = LibraryAuditLog
+        fields = '__all__'

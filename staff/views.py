@@ -16,12 +16,13 @@ from .serializers import (
     StaffLeaveSerializer, StaffDisciplinaryActionSerializer,
     StaffAttendanceSerializer, StaffQualificationSerializer
 )
-from .permissions import IsHRStaffOrReadOnly, IsSelfOrHR, IsHRManager
+from .permissions import IsHRStaff, IsSelfOrHR, IsHROrInstitutionAdmin
 from .filters import (
     StaffFilter, StaffProfileFilter, EmploymentHistoryFilter,
     StaffLeaveFilter, StaffDisciplinaryActionFilter,
     StaffAttendanceFilter, StaffQualificationFilter
 )
+
 from .analytics import StaffAnalytics
 from .ai import StaffAIEngine
 
@@ -29,7 +30,7 @@ from .ai import StaffAIEngine
 class StaffViewSet(viewsets.ModelViewSet):
     queryset = Staff.objects.all().select_related('user', 'institution', 'department')
     serializer_class = StaffSerializer
-    permission_classes = [permissions.IsAuthenticated, IsHRStaffOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated, IsHRStaff]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_class = StaffFilter
     search_fields = ['user__first_name', 'user__last_name', 'job_title', 'employee_id']
@@ -64,7 +65,7 @@ class StaffViewSet(viewsets.ModelViewSet):
 class StaffProfileViewSet(viewsets.ModelViewSet):
     queryset = StaffProfile.objects.all().select_related('user')
     serializer_class = StaffProfileSerializer
-    permission_classes = [permissions.IsAuthenticated, IsHRStaffOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated, IsHRStaff]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_class = StaffProfileFilter
     search_fields = ['user__first_name', 'user__last_name', 'user__email']
@@ -73,7 +74,7 @@ class StaffProfileViewSet(viewsets.ModelViewSet):
 class EmploymentHistoryViewSet(viewsets.ModelViewSet):
     queryset = EmploymentHistory.objects.all().select_related('staff')
     serializer_class = EmploymentHistorySerializer
-    permission_classes = [permissions.IsAuthenticated, IsHRStaffOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated, IsHRStaff]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_class = EmploymentHistoryFilter
     search_fields = ['position', 'employment_type']
@@ -87,14 +88,14 @@ class StaffLeaveViewSet(viewsets.ModelViewSet):
     filterset_class = StaffLeaveFilter
     search_fields = ['leave_type', 'reason']
 
-    @action(detail=True, methods=['post'], permission_classes=[IsHRManager])
+    @action(detail=True, methods=['post'], permission_classes=[IsHROrInstitutionAdmin])
     def approve(self, request, pk=None):
         leave = self.get_object()
         leave.is_approved = True
         leave.save()
         return Response({'status': 'Leave approved'}, status=status.HTTP_200_OK)
 
-    @action(detail=True, methods=['post'], permission_classes=[IsHRManager])
+    @action(detail=True, methods=['post'], permission_classes=[IsHROrInstitutionAdmin])
     def reject(self, request, pk=None):
         leave = self.get_object()
         leave.is_approved = False
@@ -105,7 +106,7 @@ class StaffLeaveViewSet(viewsets.ModelViewSet):
 class StaffDisciplinaryActionViewSet(viewsets.ModelViewSet):
     queryset = StaffDisciplinaryAction.objects.all().select_related('staff', 'resolved_by')
     serializer_class = StaffDisciplinaryActionSerializer
-    permission_classes = [permissions.IsAuthenticated, IsHRStaffOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated, IsHRStaff]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_class = StaffDisciplinaryActionFilter
     search_fields = ['action_taken']
@@ -114,7 +115,7 @@ class StaffDisciplinaryActionViewSet(viewsets.ModelViewSet):
 class StaffAttendanceViewSet(viewsets.ModelViewSet):
     queryset = StaffAttendance.objects.all().select_related('staff')
     serializer_class = StaffAttendanceSerializer
-    permission_classes = [permissions.IsAuthenticated, IsHRStaffOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated, IsHRStaff]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_class = StaffAttendanceFilter
     search_fields = ['status']
@@ -123,7 +124,7 @@ class StaffAttendanceViewSet(viewsets.ModelViewSet):
 class StaffQualificationViewSet(viewsets.ModelViewSet):
     queryset = StaffQualification.objects.all().select_related('staff')
     serializer_class = StaffQualificationSerializer
-    permission_classes = [permissions.IsAuthenticated, IsHRStaffOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated, IsHRStaff]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_class = StaffQualificationFilter
     search_fields = ['qualification', 'institution_name']

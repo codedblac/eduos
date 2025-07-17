@@ -1,10 +1,20 @@
-# assessments/views.py
-
-from rest_framework import viewsets, status, generics, filters
-from rest_framework.decorators import action
+from rest_framework import viewsets, generics, filters, permissions, status
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from django.utils import timezone
-from django.db.models import Avg, Count
+from django.shortcuts import get_object_or_404
+from collections import Counter
+from students.serializers import StudentSerializer 
+from exams.models import StudentScore, ExamSubject
+from subjects.models import Subject
+from subjects.serializers import SubjectSerializer
+
+
+from rest_framework.response import Response
+from rest_framework import status
+from django.db.models import Avg
+from .models import AssessmentResult
+from students.models import Student
 
 from assessments.models import (
     AssessmentType, AssessmentTemplate, Assessment, Question, AnswerChoice,
@@ -12,6 +22,7 @@ from assessments.models import (
     RetakePolicy, AssessmentGroup, AssessmentWeight, AssessmentLock,
     AssessmentVisibility, PerformanceTrend, CodeTestCase
 )
+
 from assessments.serializers import (
     AssessmentTypeSerializer, AssessmentTemplateSerializer, AssessmentSerializer,
     QuestionSerializer, AnswerChoiceSerializer, AssessmentSessionSerializer,
@@ -20,12 +31,29 @@ from assessments.serializers import (
     AssessmentWeightSerializer, AssessmentLockSerializer, AssessmentVisibilitySerializer,
     PerformanceTrendSerializer, CodeTestCaseSerializer
 )
-from assessments.analytics import *
-from assessments.ai import AssessmentAIEngine
+
+from assessments.analytics import (
+    get_overall_performance_summary,
+    get_student_performance_trend,
+    get_subject_coverage_analysis,
+    get_flagged_students,
+    get_topic_mastery_heatmap,
+    get_assessment_participation_rate
+)
+
+from assessments.ai import (
+    generate_adaptive_assessment,
+    predict_student_score,
+    recommend_remedial_assessment,
+    get_underrepresented_topics,
+    suggest_questions_for_topic
+)
+
 from students.models import Student
+from subjects.models import Subject
 
 
-# ---------------------- Basic Model ViewSets ----------------------
+# ---------------------- Model ViewSets ----------------------
 
 class AssessmentTypeViewSet(viewsets.ModelViewSet):
     queryset = AssessmentType.objects.all()
@@ -47,7 +75,7 @@ class AssessmentViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def lock(self, request, pk=None):
         assessment = self.get_object()
-        lock, created = AssessmentLock.objects.get_or_create(assessment=assessment)
+        lock, _ = AssessmentLock.objects.get_or_create(assessment=assessment)
         lock.locked = True
         lock.locked_at = timezone.now()
         lock.save()
@@ -133,52 +161,162 @@ class CodeTestCaseViewSet(viewsets.ModelViewSet):
 
 # ---------------------- Analytics ----------------------
 
-class InstitutionPerformanceView(generics.GenericAPIView):
-    def get(self, request, *args, **kwargs):
-        institution = request.user.institution
-        data = overall_performance_summary(institution)
-        return Response(data)
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def overall_performance_summary_view(request):
+    data = get_overall_performance_summary(request.user.institution)
+    return Response(data)
 
 
-class StudentTrendView(generics.GenericAPIView):
-    def get(self, request, *args, **kwargs):
-        student = request.user.student
-        data = student_performance_trend(student)
-        return Response(data)
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def student_performance_trend_view(request, student_id):
+    student = get_object_or_404(Student, id=student_id)
+    trend = get_student_performance_trend(student)
+    return Response(trend)
 
 
-class HeatmapView(generics.GenericAPIView):
-    def get(self, request, *args, **kwargs):
-        student = request.user.student
-        data = topic_mastery_heatmap(student)
-        return Response(data)
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def subject_coverage_analysis_view(request, subject_id):
+    subject = get_object_or_404(Subject, id=subject_id)
+    coverage = get_subject_coverage_analysis(subject)
+    return Response(coverage)
 
 
-class ParticipationRateView(generics.GenericAPIView):
-    def get(self, request, assessment_id, *args, **kwargs):
-        assessment = Assessment.objects.get(id=assessment_id)
-        data = assessment_participation_rate(assessment)
-        return Response(data)
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def flagged_students_view(request):
+    flagged = get_flagged_students(request.user.institution)
+    return Response(flagged)
 
 
-# ---------------------- AI Utilities ----------------------
-
-class AdaptiveAssessmentView(generics.GenericAPIView):
-    def get(self, request, subject_id):
-        student = request.user.student
-        subject = Subject.objects.get(id=subject_id)
-        questions = AssessmentAIEngine.generate_adaptive_assessment(
-            student=student,
-            subject=subject,
-            class_level=student.class_level,
-            term=student.current_term,
-        )
-        return Response(QuestionSerializer(questions, many=True).data)
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def topic_mastery_heatmap_view(request, student_id):
+    student = get_object_or_404(Student, id=student_id)
+    heatmap = get_topic_mastery_heatmap(student)
+    return Response(heatmap)
 
 
-class PredictedScoreView(generics.GenericAPIView):
-    def get(self, request, subject_id):
-        student = request.user.student
-        subject = Subject.objects.get(id=subject_id)
-        score = AssessmentAIEngine.predict_student_score(student, subject)
-        return Response({"predicted_score": score})
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def assessment_participation_rate_view(request, assessment_id):
+    assessment = get_object_or_404(Assessment, id=assessment_id)
+    data = get_assessment_participation_rate(assessment)
+    return Response(data)
+
+
+# ---------------------- AI Views ----------------------
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def generate_adaptive_assessment_view(request, student_id, subject_id, class_level_id, term_id):
+    data = generate_adaptive_assessment(student_id, subject_id, class_level_id, term_id)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def predict_student_score_view(request, student_id, subject_id):
+    score = predict_student_score(student_id, subject_id)
+    return Response({'predicted_score': score})
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def recommend_remedial_assessment_view(request, student_id, subject_id):
+    data = recommend_remedial_assessment(student_id, subject_id)
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def underrepresented_topics_view(request, subject_id):
+    topics = get_underrepresented_topics(subject_id)
+    return Response({'topics': topics})
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def suggest_questions_for_topic_view(request, topic_id):
+    questions = suggest_questions_for_topic(topic_id)
+    return Response({'questions': questions})
+
+@api_view(['POST'])
+def lock_assessment(request, pk):
+    try:
+        assessment = Assessment.objects.get(pk=pk)
+        assessment.is_locked = True
+        assessment.save()
+        return Response({'detail': 'Assessment locked successfully'}, status=status.HTTP_200_OK)
+    except Assessment.DoesNotExist:
+        return Response({'detail': 'Assessment not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    
+@api_view(['POST'])
+def publish_assessment(request, pk):
+    try:
+        assessment = Assessment.objects.get(pk=pk)
+        assessment.is_published = True
+        assessment.save()
+        return Response({'detail': 'Assessment published successfully'}, status=status.HTTP_200_OK)
+    except Assessment.DoesNotExist:
+        return Response({'detail': 'Assessment not found'}, status=status.HTTP_404_NOT_FOUND) 
+    
+    
+@api_view(['GET'])
+def assessment_type_distribution_view(request):
+    type_counts = Assessment.objects.values_list('type', flat=True)
+    distribution = dict(Counter(type_counts))
+    return Response({
+        'type_distribution': distribution
+    }, status=status.HTTP_200_OK)
+    
+    
+@api_view(['GET'])
+def top_performing_students_view(request):
+    limit = int(request.query_params.get('limit', 10))  # Optional: ?limit=5
+    top_scores = (
+        AssessmentResult.objects
+        .values('student')
+        .annotate(avg_score=Avg('score'))
+        .order_by('-avg_score')[:limit]
+    )
+
+    student_ids = [entry['student'] for entry in top_scores]
+    students = Student.objects.filter(id__in=student_ids)
+
+    # Map student to avg_score
+    score_map = {entry['student']: entry['avg_score'] for entry in top_scores}
+    data = []
+    for student in students:
+        serialized = StudentSerializer(student).data
+        serialized['average_score'] = round(score_map[student.id], 2)
+        data.append(serialized)
+
+    return Response({'top_performers': data}, status=status.HTTP_200_OK)
+
+
+
+@api_view(['GET'])
+def subject_difficulty_ranking_view(request):
+    # Compute average score per subject
+    avg_scores = (
+        AssessmentResult.objects
+        .values('exam_subject__subject')
+        .annotate(avg_score=Avg('score'))
+        .order_by('avg_score')  # ascending: low score = more difficult
+    )
+
+    subject_ids = [entry['exam_subject__subject'] for entry in avg_scores]
+    subjects = Subject.objects.filter(id__in=subject_ids)
+
+    score_map = {entry['exam_subject__subject']: entry['avg_score'] for entry in avg_scores}
+    ranked_subjects = []
+    for subject in subjects:
+        serialized = SubjectSerializer(subject).data
+        serialized['average_score'] = round(score_map[subject.id], 2)
+        ranked_subjects.append(serialized)
+
+    return Response({'difficulty_ranking': ranked_subjects}, status=status.HTTP_200_OK)

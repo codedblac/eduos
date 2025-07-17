@@ -1,103 +1,121 @@
-# transport/analytics.py
-
 from django.db.models import Sum, Avg, Count
 from django.utils import timezone
 from datetime import timedelta
-from .models import Vehicle, TripLog, MaintenanceRecord, TransportBooking
+from .models import (
+    Vehicle, TripLog, VehicleLog,
+    MaintenanceRecord, TransportBooking, Driver
+)
 from institutions.models import Institution
+
 
 class TransportAnalyticsEngine:
     def __init__(self, institution: Institution):
         self.institution = institution
 
-    def vehicle_utilization_summary(self):
+    def vehicle_utilization_summary(self, days=30):
+        """
+        Get distance and fuel stats for each vehicle in the past `days`.
+        """
+        cutoff = timezone.now().date() - timedelta(days=days)
         vehicles = Vehicle.objects.filter(institution=self.institution)
         data = []
 
         for vehicle in vehicles:
-            trip_count = TripLog.objects.filter(vehicle=vehicle).count()
-            total_distance = TripLog.objects.filter(vehicle=vehicle).aggregate(Sum('distance_km'))['distance_km__sum'] or 0
-            total_fuel = TripLog.objects.filter(vehicle=vehicle).aggregate(Sum('fuel_used_liters'))['fuel_used_liters__sum'] or 0
-            avg_efficiency = total_distance / total_fuel if total_fuel else 0
+            logs = VehicleLog.objects.filter(vehicle=vehicle, date__gte=cutoff)
+            total_distance = logs.aggregate(Sum('distance_travelled_km'))['distance_travelled_km__sum'] or 0
+            total_fuel = logs.aggregate(Sum('fuel_used_litres'))['fuel_used_litres__sum'] or 0
+            efficiency = (total_distance / total_fuel) if total_fuel else 0
+            trip_count = TripLog.objects.filter(vehicle=vehicle, institution=self.institution).count()
 
             data.append({
                 "vehicle": str(vehicle),
                 "total_trips": trip_count,
                 "total_distance_km": total_distance,
-                "total_fuel_liters": total_fuel,
-                "average_efficiency_km_per_liter": round(avg_efficiency, 2),
+                "total_fuel_litres": total_fuel,
+                "average_efficiency_km_per_litre": round(efficiency, 2),
             })
 
         return data
 
     def maintenance_summary(self):
-        records = MaintenanceRecord.objects.filter(institution=self.institution)
-        recent = records.order_by('-date')[:10]
-        upcoming_due = Vehicle.objects.filter(
+        """
+        Recent maintenance and upcoming due vehicles.
+        """
+        recent = MaintenanceRecord.objects.filter(institution=self.institution).order_by('-performed_on')[:10]
+        due_soon = Vehicle.objects.filter(
             institution=self.institution,
-            next_service_due__lte=timezone.now() + timedelta(days=30)
+            last_service_date__lte=timezone.now().date() - timedelta(days=180)  # semiannual check
         )
 
         return {
             "recent_maintenance": [
                 {
                     "vehicle": str(r.vehicle),
-                    "service_type": r.service_type,
-                    "date": r.date,
-                    "notes": r.notes,
+                    "maintenance_type": r.maintenance_type,
+                    "performed_on": r.performed_on,
+                    "next_due_date": r.next_due_date,
+                    "cost": float(r.cost or 0),
                 }
                 for r in recent
             ],
-            "upcoming_due_vehicles": [
+            "vehicles_due_soon": [
                 {
                     "vehicle": str(v),
-                    "due_date": v.next_service_due,
-                    "assigned_driver": str(v.assigned_driver) if v.assigned_driver else None
+                    "last_service": v.last_service_date,
+                    "assigned_route": str(v.assigned_route) if v.assigned_route else None,
+                    "notes": v.notes
                 }
-                for v in upcoming_due
+                for v in due_soon
             ]
         }
 
     def booking_statistics(self):
-        total = TransportBooking.objects.filter(institution=self.institution).count()
-        approved = TransportBooking.objects.filter(institution=self.institution, status='approved').count()
-        rejected = TransportBooking.objects.filter(institution=self.institution, status='rejected').count()
-        pending = TransportBooking.objects.filter(institution=self.institution, status='pending').count()
-
+        """
+        Booking status breakdown.
+        """
+        qs = TransportBooking.objects.filter(institution=self.institution)
         return {
-            "total_bookings": total,
-            "approved": approved,
-            "rejected": rejected,
-            "pending": pending,
+            "total_bookings": qs.count(),
+            "confirmed": qs.filter(status='confirmed').count(),
+            "pending": qs.filter(status='pending').count(),
+            "cancelled": qs.filter(status='cancelled').count(),
         }
 
     def weekly_trip_heatmap(self):
+        """
+        Trips per day over the past week.
+        """
         today = timezone.now().date()
-        last_7_days = [today - timedelta(days=i) for i in range(6, -1, -1)]
-        data = []
+        days = [today - timedelta(days=i) for i in range(6, -1, -1)]
 
-        for day in last_7_days:
-            trips = TripLog.objects.filter(
+        heatmap = []
+        for day in days:
+            trip_count = TripLog.objects.filter(
                 institution=self.institution,
-                trip_date=day
+                start_time__date=day
             ).count()
-            data.append({"date": day.strftime("%Y-%m-%d"), "trips": trips})
+            heatmap.append({"date": day.strftime("%Y-%m-%d"), "trip_count": trip_count})
 
-        return data
+        return heatmap
 
     def driver_activity_report(self):
-        drivers = TripLog.objects.filter(institution=self.institution).values('driver').annotate(
-            trip_count=Count('id'),
-            total_km=Sum('distance_km'),
-            total_fuel=Sum('fuel_used_liters')
-        ).order_by('-trip_count')
+        """
+        Summary of trips and performance by driver.
+        """
+        stats = TripLog.objects.filter(
+            institution=self.institution,
+            status='completed'
+        ).values('driver__id', 'driver__user__first_name', 'driver__user__last_name').annotate(
+            total_trips=Count('id'),
+            total_duration=Sum('end_time') - Sum('start_time'),
+        ).order_by('-total_trips')
 
         return [
             {
-                "driver_id": entry['driver'],
-                "trip_count": entry['trip_count'],
-                "total_km": entry['total_km'],
-                "total_fuel_liters": entry['total_fuel']
+                "driver_id": s["driver__id"],
+                "name": f"{s['driver__user__first_name']} {s['driver__user__last_name']}",
+                "total_trips": s["total_trips"],
+                "estimated_hours": round((s["total_duration"].total_seconds() / 3600), 2) if s["total_duration"] else 0
             }
-            for entry in drivers
+            for s in stats
         ]

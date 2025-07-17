@@ -1,7 +1,7 @@
 from typing import Dict, List
 from collections import defaultdict
 
-from django.db.models import Avg, Count, Q, StdDev
+from django.db.models import Avg, Count, Q
 from django.utils import timezone
 
 from assessments.models import (
@@ -12,23 +12,24 @@ from students.models import Student
 from subjects.models import Subject
 
 
-def overall_performance_summary(institution) -> List[Dict]:
+def get_overall_performance_summary(institution) -> List[Dict]:
     """
-    Average score per subject for a given institution.
+    Returns average score and total assessments per subject for the institution.
     """
     return list(
         AssessmentResult.objects.filter(
             assessment__institution=institution
-        ).values('assessment__subject__name').annotate(
+        ).values('assessment__subject__name')
+        .annotate(
             avg_score=Avg('score'),
             total=Count('id')
         ).order_by('assessment__subject__name')
     )
 
 
-def student_performance_trend(student: Student) -> List[Dict]:
+def get_student_performance_trend(student: Student) -> List[Dict]:
     """
-    Return student's assessment performance trend chronologically.
+    Returns chronological performance trend for a student across assessments.
     """
     results = AssessmentResult.objects.filter(
         student=student
@@ -44,23 +45,23 @@ def student_performance_trend(student: Student) -> List[Dict]:
     ]
 
 
-def subject_coverage_analysis(subject: Subject) -> Dict[str, int]:
+def get_subject_coverage_analysis(subject: Subject) -> Dict[str, int]:
     """
-    Count how many questions have been tagged per topic for a subject.
+    Returns a topic-wise question distribution for a subject.
     """
     questions = Question.objects.filter(subject=subject).select_related('topic')
     topic_counts = defaultdict(int)
 
-    for q in questions:
-        if q.topic:
-            topic_counts[q.topic.title] += 1
+    for question in questions:
+        if question.topic:
+            topic_counts[question.topic.title] += 1
 
     return dict(topic_counts)
 
 
-def flagged_students_for_inconsistency(institution) -> List[Dict]:
+def get_flagged_students(institution) -> List[Dict]:
     """
-    Flag students with inconsistent score patterns using score range.
+    Flags students with inconsistent score patterns (e.g., deviation > 30).
     """
     flagged = []
     students = Student.objects.filter(institution=institution)
@@ -70,7 +71,6 @@ def flagged_students_for_inconsistency(institution) -> List[Dict]:
             AssessmentResult.objects.filter(student=student)
             .values_list('score', flat=True)
         )
-
         if len(scores) >= 3:
             deviation = max(scores) - min(scores)
             if deviation > 30:
@@ -86,32 +86,35 @@ def flagged_students_for_inconsistency(institution) -> List[Dict]:
     return flagged
 
 
-def topic_mastery_heatmap(student: Student) -> Dict[str, Dict]:
+def get_topic_mastery_heatmap(student: Student) -> Dict[str, Dict]:
     """
-    Return topic-wise accuracy breakdown for a student.
+    Returns a heatmap showing topic-wise mastery (correct/total ratio).
     """
-    answers = StudentAnswer.objects.filter(session__student=student).select_related('question__topic')
+    answers = StudentAnswer.objects.filter(
+        session__student=student
+    ).select_related('question__topic')
+
     heatmap = defaultdict(lambda: {'correct': 0, 'total': 0})
 
     for answer in answers:
         topic = answer.question.topic if answer.question else None
         if topic:
-            key = topic.title
-            heatmap[key]['total'] += 1
+            topic_title = topic.title
+            heatmap[topic_title]['total'] += 1
             if getattr(answer, 'is_correct', False):
-                heatmap[key]['correct'] += 1
+                heatmap[topic_title]['correct'] += 1
 
-    for topic in heatmap:
-        correct = heatmap[topic]['correct']
-        total = heatmap[topic]['total']
-        heatmap[topic]['mastery_percent'] = round((correct / total) * 100, 2) if total else 0
+    for topic_title in heatmap:
+        correct = heatmap[topic_title]['correct']
+        total = heatmap[topic_title]['total']
+        heatmap[topic_title]['mastery_percent'] = round((correct / total) * 100, 2) if total else 0
 
     return dict(heatmap)
 
 
-def assessment_participation_rate(assessment: Assessment) -> Dict:
+def get_assessment_participation_rate(assessment: Assessment) -> Dict:
     """
-    How many students attempted vs expected for an assessment.
+    Returns participation data for a specific assessment.
     """
     total_assigned = assessment.assigned_to.count() if hasattr(assessment, 'assigned_to') else 0
     attempted = AssessmentSession.objects.filter(assessment=assessment).count()
@@ -123,9 +126,9 @@ def assessment_participation_rate(assessment: Assessment) -> Dict:
     }
 
 
-def assessment_type_distribution(institution) -> Dict[str, int]:
+def get_assessment_type_distribution(institution) -> Dict[str, int]:
     """
-    Count how many assessments of each type exist within an institution.
+    Returns distribution of assessments by type within an institution.
     """
     distribution = Assessment.objects.filter(
         institution=institution
@@ -134,9 +137,9 @@ def assessment_type_distribution(institution) -> Dict[str, int]:
     return {entry['type__name']: entry['total'] for entry in distribution}
 
 
-def top_performing_students(institution, limit=10) -> List[Dict]:
+def get_top_performing_students(institution, limit=10) -> List[Dict]:
     """
-    Top N students by average assessment score.
+    Returns top N students with the highest average assessment scores.
     """
     return list(
         AssessmentResult.objects.filter(
@@ -147,9 +150,9 @@ def top_performing_students(institution, limit=10) -> List[Dict]:
     )
 
 
-def subject_difficulty_ranking(institution) -> List[Dict]:
+def get_subject_difficulty_ranking(institution) -> List[Dict]:
     """
-    Subjects ranked by average student performance — lower = harder.
+    Ranks subjects by average performance (lowest first = hardest).
     """
     return list(
         AssessmentResult.objects.filter(

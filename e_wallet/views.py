@@ -19,7 +19,7 @@ from e_wallet.serializers import (
     WalletPolicySerializer,
     MicroFeeSerializer,
     MicroFeeAssignmentSerializer,
-    StudentWalletSerializer,
+    WalletSerializer,
 )
 from e_wallet.permissions import (
     IsParent,
@@ -38,7 +38,7 @@ from e_wallet.filters import (
 
 class WalletViewSet(viewsets.ModelViewSet):
     queryset = Wallet.objects.select_related('student', 'institution')
-    serializer_class = StudentWalletSerializer
+    serializer_class = WalletSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_class = WalletFilter

@@ -1,12 +1,12 @@
-from django.shortcuts import render
-
 from django.db import models
-from rest_framework import viewsets, permissions, status
-from rest_framework.response import Response
-from rest_framework.decorators import action, api_view, permission_classes
 from django.db.models import Q
+from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import viewsets, permissions, status
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.response import Response
 from rest_framework.filters import OrderingFilter, SearchFilter
+
 from .models import (
     Event, EventRSVP, EventFeedback,
     EventAttendance, EventTag, RecurringEventRule
@@ -16,17 +16,19 @@ from .serializers import (
     EventFeedbackSerializer, EventAttendanceSerializer,
     EventTagSerializer, RecurringEventRuleSerializer
 )
-from institutions.permissions import IsInstitutionMember
+from .permissions import IsInstitutionMember
+from .filters import EventFilter
 from .ai import suggest_slots
 from accounts.models import CustomUser
 
 
 class EventViewSet(viewsets.ModelViewSet):
-    queryset = Event.objects.all()
+    queryset = Event.objects.all().select_related('institution', 'created_by', 'recurring_rule')\
+        .prefetch_related('tags', 'target_users', 'target_students', 'target_class_levels', 'target_streams')
     serializer_class = EventSerializer
     permission_classes = [permissions.IsAuthenticated, IsInstitutionMember]
     filter_backends = [DjangoFilterBackend, OrderingFilter, SearchFilter]
-    filterset_fields = ['event_type', 'is_virtual', 'start_time', 'target_roles']
+    filterset_class = EventFilter
     ordering_fields = ['start_time', 'created_at']
     search_fields = ['title', 'description', 'tags__name']
 
@@ -35,22 +37,26 @@ class EventViewSet(viewsets.ModelViewSet):
         institution = user.institution
         qs = Event.objects.filter(institution=institution)
 
-        if user.role == 'student':
+        if user.role == 'student' and hasattr(user, 'student'):
+            student = user.student
             qs = qs.filter(
-                models.Q(target_roles__contains=['student']) |
-                models.Q(target_students=user.student) |
-                models.Q(target_class_levels=user.student.class_level) |
-                models.Q(target_streams=user.student.stream)
+                Q(target_roles__contains=['student']) |
+                Q(target_students=student) |
+                Q(target_class_levels=student.class_level) |
+                Q(target_streams=student.stream)
             )
         elif user.role == 'guardian':
-            qs = qs.filter(target_roles__contains=['guardian'])
+            qs = qs.filter(Q(target_roles__contains=['guardian']))
         elif user.role == 'teacher':
-            qs = qs.filter(target_roles__contains=['teacher'])
-        # admins see all
+            qs = qs.filter(Q(target_roles__contains=['teacher']))
+        # Admins and staff see all
         return qs.distinct()
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user, institution=self.request.user.institution)
+        serializer.save(
+            created_by=self.request.user,
+            institution=self.request.user.institution
+        )
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def rsvp(self, request, pk=None):
@@ -59,7 +65,7 @@ class EventViewSet(viewsets.ModelViewSet):
         if serializer.is_valid():
             serializer.save(event=event)
             return Response(serializer.data)
-        return Response(serializer.errors, status=400)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def mark_attendance(self, request, pk=None):
@@ -68,7 +74,7 @@ class EventViewSet(viewsets.ModelViewSet):
         if serializer.is_valid():
             serializer.save(event=event)
             return Response(serializer.data)
-        return Response(serializer.errors, status=400)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def feedback(self, request, pk=None):
@@ -77,7 +83,7 @@ class EventViewSet(viewsets.ModelViewSet):
         if serializer.is_valid():
             serializer.save(event=event)
             return Response(serializer.data)
-        return Response(serializer.errors, status=400)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class EventTagViewSet(viewsets.ModelViewSet):
@@ -86,16 +92,18 @@ class EventTagViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated, IsInstitutionMember]
 
     def get_queryset(self):
-        return EventTag.objects.all()
+        return self.queryset
 
 
 class RecurringEventRuleViewSet(viewsets.ModelViewSet):
     queryset = RecurringEventRule.objects.all()
     serializer_class = RecurringEventRuleSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsInstitutionMember]
+
+    def get_queryset(self):
+        return self.queryset
 
 
-# ✅ AI-powered time suggestion endpoint
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def suggest_event_slots(request):

@@ -4,7 +4,13 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.permissions import IsAuthenticated
-
+from rest_framework.views import APIView
+from django.shortcuts import get_object_or_404
+from admissions.ai import recommend_admission_status
+from admissions.models import Applicant
+from admissions.analytics import get_admission_summary 
+from rest_framework import permissions, status
+from students.models import Student  
 from .models import (
     AdmissionSession, Applicant, AdmissionDocument, EntranceExam,
     AdmissionOffer, AdmissionComment
@@ -13,7 +19,7 @@ from .serializers import (
     AdmissionSessionSerializer, ApplicantSerializer, AdmissionDocumentSerializer,
     EntranceExamSerializer, AdmissionOfferSerializer, AdmissionCommentSerializer
 )
-from .permissions import IsStaffOrReadOnly, CanManageAdmission
+from .permissions import IsOwnerOrReadOnly, CanManageAdmission
 from .filters import (
     AdmissionSessionFilter, ApplicantFilter,
     EntranceExamFilter, AdmissionOfferFilter
@@ -24,7 +30,7 @@ from . import analytics, ai
 class AdmissionSessionViewSet(viewsets.ModelViewSet):
     queryset = AdmissionSession.objects.all()
     serializer_class = AdmissionSessionSerializer
-    permission_classes = [IsAuthenticated, IsStaffOrReadOnly]
+    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
     filter_backends = [DjangoFilterBackend]
     filterset_class = AdmissionSessionFilter
 
@@ -82,7 +88,7 @@ class AdmissionDocumentViewSet(viewsets.ModelViewSet):
 class EntranceExamViewSet(viewsets.ModelViewSet):
     queryset = EntranceExam.objects.all()
     serializer_class = EntranceExamSerializer
-    permission_classes = [IsAuthenticated, IsStaffOrReadOnly]
+    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
     filter_backends = [DjangoFilterBackend]
     filterset_class = EntranceExamFilter
 
@@ -90,7 +96,7 @@ class EntranceExamViewSet(viewsets.ModelViewSet):
 class AdmissionOfferViewSet(viewsets.ModelViewSet):
     queryset = AdmissionOffer.objects.all()
     serializer_class = AdmissionOfferSerializer
-    permission_classes = [IsAuthenticated, IsStaffOrReadOnly]
+    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
     filter_backends = [DjangoFilterBackend]
     filterset_class = AdmissionOfferFilter
 
@@ -125,3 +131,87 @@ class AdmissionAnalyticsViewSet(viewsets.ViewSet):
             "per_session": analytics.get_admission_session_summary(),
         }
         return Response(data)
+
+
+class AIPlacementSuggestionAPIView(APIView):
+    def post(self, request):
+        # TODO: Replace with real AI logic
+        data = request.data
+        suggested_class = "Grade 5"  # Placeholder logic
+        return Response({"suggested_class": suggested_class}, status=status.HTTP_200_OK)
+    
+
+class RecommendAdmissionStatusAPIView(APIView):
+    def get(self, request, pk):
+        try:
+            application = Applicant.objects.get(pk=pk)
+        except Applicant.DoesNotExist:
+            return Response({"error": "Application not found."}, status=404)
+
+        # Actual recommendation logic using your AI or rule-based system
+        recommended_status = recommend_admission_status(application)
+
+        return Response({
+            "applicant_id": application.id,
+            "recommended_status": recommended_status
+        }, status=200)
+        
+        
+class AdmissionAnalyticsAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        summary = get_admission_summary()
+        return Response(summary, status=status.HTTP_200_OK)
+    
+    
+class GenerateOfferLetterAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, pk, *args, **kwargs):
+        application = get_object_or_404(Applicant, pk=pk)
+        
+        # TODO: Replace with real letter generation logic
+        # For now just simulating data
+        offer_data = {
+            "applicant": str(application.applicant),
+            "program": str(application.program_applied),
+            "status": application.status,
+            "message": "Offer letter generated successfully."
+        }
+
+        # You can later replace this with PDF generation and file response
+        return Response(offer_data, status=status.HTTP_200_OK)
+    
+    
+class EnrollApplicantAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk, *args, **kwargs):
+        application = get_object_or_404(Applicant, pk=pk)
+
+        if application.status != "accepted":
+            return Response({"detail": "Only accepted applicants can be enrolled."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # TODO: Replace with actual enrollment logic (e.g. create StudentProfile, ClassAssignment, etc.)
+        application.status = "enrolled"
+        application.save()
+
+        return Response({"message": "Applicant successfully enrolled."}, status=status.HTTP_200_OK)
+    
+    
+class GenerateStudentIDAPIView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk, *args, **kwargs):
+        application = get_object_or_404(Applicant, pk=pk)
+
+        if not application.student_id:
+            # Example logic to generate ID — you can customize this
+            application.student_id = f"S{str(application.id).zfill(6)}"
+            application.save()
+
+        return Response({
+            "message": "Student ID generated successfully.",
+            "student_id": application.student_id
+        }, status=status.HTTP_200_OK)

@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from .models import (
     ChatRoom, ChatRoomMembership, ChatMessage, MediaAttachment, 
     MessageReaction, ChatbotResponse, ChatSetting, ChatStatus, 
-    MuteRoom, MessageEditHistory, PinnedMessage, ReadReceipt,
+    MuteRoom, MessageEditHistory, ChatMessage, MessageReadReceipt,
     ChannelAnnouncement
 )
 
@@ -80,7 +80,7 @@ class PinnedMessageSerializer(serializers.ModelSerializer):
     message = ChatMessageSerializer(read_only=True)
 
     class Meta:
-        model = PinnedMessage
+        model = ChatMessage
         fields = '__all__'
 
 
@@ -105,7 +105,7 @@ class ReadReceiptSerializer(serializers.ModelSerializer):
     user = UserMiniSerializer(read_only=True)
 
     class Meta:
-        model = ReadReceipt
+        model = MessageReadReceipt
         fields = '__all__'
 
 

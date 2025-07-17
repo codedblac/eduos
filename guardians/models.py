@@ -1,6 +1,9 @@
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
+
 from institutions.models import Institution
 from students.models import Student
 
@@ -15,6 +18,20 @@ GUARDIAN_NOTIFICATION_TYPES = [
     ("wallet", "Wallet Activity"),
 ]
 
+NOTIFICATION_PRIORITY = [
+    ("low", "Low"),
+    ("normal", "Normal"),
+    ("high", "High"),
+    ("urgent", "Urgent"),
+]
+
+DELIVERY_METHODS = [
+    ("system", "System Only"),
+    ("email", "Email"),
+    ("sms", "SMS"),
+    ("push", "Push Notification"),
+]
+
 RELATIONSHIP_CHOICES = [
     ("father", "Father"),
     ("mother", "Mother"),
@@ -26,6 +43,7 @@ RELATIONSHIP_CHOICES = [
     ("other", "Other"),
 ]
 
+
 class Guardian(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='guardian_profile')
     institution = models.ForeignKey(Institution, on_delete=models.CASCADE, related_name="guardians")
@@ -35,8 +53,13 @@ class Guardian(models.Model):
     id_number = models.CharField(max_length=50, blank=True, null=True)
     occupation = models.CharField(max_length=100, blank=True, null=True)
     address = models.TextField(blank=True, null=True)
+    profile_photo = models.ImageField(upload_to='guardians/photos/', blank=True, null=True)
+    preferred_language = models.CharField(max_length=20, default='en')
+    notification_preferences = models.JSONField(blank=True, null=True)
 
     is_active = models.BooleanField(default=True)
+    is_deleted = models.BooleanField(default=False)
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -53,6 +76,11 @@ class GuardianStudentLink(models.Model):
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="guardian_links")
     relationship = models.CharField(max_length=50, choices=RELATIONSHIP_CHOICES)
     is_primary = models.BooleanField(default=False)
+    verified_by_school = models.BooleanField(default=False)
+    notes = models.TextField(blank=True, null=True)
+    start_date = models.DateField(blank=True, null=True)
+    end_date = models.DateField(blank=True, null=True)
+    is_deleted = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -72,10 +100,19 @@ class GuardianNotification(models.Model):
     title = models.CharField(max_length=255)
     message = models.TextField()
     type = models.CharField(max_length=50, choices=GUARDIAN_NOTIFICATION_TYPES)
-    related_object_type = models.CharField(max_length=100, blank=True, null=True, help_text="e.g., 'medical.MedicalVisit'")
-    related_object_id = models.CharField(max_length=100, blank=True, null=True, help_text="Primary key of the related object")
+    
+    # Generic relation to related object
+    content_type = models.ForeignKey(ContentType, on_delete=models.SET_NULL, null=True, blank=True)
+    object_id = models.CharField(max_length=100, blank=True, null=True)
+    content_object = GenericForeignKey("content_type", "object_id")
 
     is_read = models.BooleanField(default=False)
+    read_at = models.DateTimeField(null=True, blank=True)
+    priority = models.CharField(max_length=20, choices=NOTIFICATION_PRIORITY, default='normal')
+    delivered_via = models.CharField(max_length=20, choices=DELIVERY_METHODS, default='system')
+    scheduled_for = models.DateTimeField(null=True, blank=True)
+    is_deleted = models.BooleanField(default=False)
+
     timestamp = models.DateTimeField(default=timezone.now)
 
     class Meta:

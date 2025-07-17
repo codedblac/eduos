@@ -1,23 +1,30 @@
+# departments/tasks.py
+
 from celery import shared_task
 from django.utils import timezone
-from django.core.mail import send_mail
+from django.db.models import Avg, Q
 from django.conf import settings
-from django.db.models import Avg, Count, Q
 
-from .models import Department, Subject, DepartmentUser
-from exams.models import ExamResult  # assuming this exists
-from attendance.models import TeacherAttendance  # assuming this exists
-from notifications.utils import send_notification  # abstracted notification function
+from departments.models import Department, Subject, DepartmentUser
+from exams.models import ExamResult
+from attendance.models import ClassAttendanceRecord
+from notifications.utils import send_notification  # Your project-specific util
 
 
 @shared_task
 def send_department_role_notification(department_user_id):
+    """
+    Notify a user when they are assigned a new department role.
+    """
     try:
         dept_user = DepartmentUser.objects.select_related('user', 'department').get(id=department_user_id)
-        message = f"You have been assigned the role of {dept_user.get_role_display()} in the {dept_user.department.name} Department."
+        message = (
+            f"You have been assigned the role of {dept_user.get_role_display()} "
+            f"in the {dept_user.department.name} department."
+        )
         send_notification(
             user=dept_user.user,
-            title="New Department Role",
+            title="Department Role Assigned",
             message=message,
             target="departments"
         )
@@ -27,30 +34,46 @@ def send_department_role_notification(department_user_id):
 
 @shared_task
 def notify_underperforming_students(subject_id, threshold=40):
+    """
+    Notify guardians of students who scored below the threshold in a subject.
+    """
     try:
         subject = Subject.objects.get(id=subject_id)
-        results = ExamResult.objects.filter(subject=subject, score__lt=threshold)
+        results = ExamResult.objects.select_related('student', 'student__guardian').filter(
+            subject=subject, score__lt=threshold
+        )
         for result in results:
-            send_notification(
-                user=result.student.guardian,  # assuming linked
-                title=f"Low Performance in {subject.name}",
-                message=f"{result.student.get_full_name()} scored {result.score} in {subject.name}.",
-                target="exams"
-            )
+            guardian = getattr(result.student, 'guardian', None)
+            if guardian:
+                send_notification(
+                    user=guardian,
+                    title=f"Low Performance Alert: {subject.name}",
+                    message=(
+                        f"{result.student.get_full_name()} scored {result.score} in {subject.name}. "
+                        f"Please take appropriate academic support actions."
+                    ),
+                    target="exams"
+                )
     except Subject.DoesNotExist:
         pass
 
 
 @shared_task
 def compute_department_performance(department_id):
+    """
+    Compute average score for each subject in a department.
+    Returns: { 'Math': 68.5, 'Science': 74.0, ... }
+    """
     try:
         department = Department.objects.prefetch_related('subjects').get(id=department_id)
         subjects = department.subjects.all()
         performance = {}
+
         for subject in subjects:
             avg_score = ExamResult.objects.filter(subject=subject).aggregate(avg=Avg('score'))['avg']
             if avg_score is not None:
                 performance[subject.name] = round(avg_score, 2)
+
         return performance
     except Department.DoesNotExist:
         return {}
@@ -58,16 +81,28 @@ def compute_department_performance(department_id):
 
 @shared_task
 def compute_teacher_attendance(department_id):
+    """
+    Compute attendance percentage for each teacher in a department.
+    Returns: { 'Mr. John Doe': 95.0, 'Ms. Jane Smith': 88.5, ... }
+    """
     try:
         department = Department.objects.get(id=department_id)
-        teachers = DepartmentUser.objects.filter(department=department, is_active=True)
+        members = DepartmentUser.objects.filter(department=department, is_active=True)
+
         attendance_data = {}
-        for user in teachers:
-            attendance_rate = TeacherAttendance.objects.filter(
-                teacher=user.user,
-                date__month=timezone.now().month
-            ).aggregate(rate=Avg('status'))['rate']  # assuming binary attendance (1 or 0)
-            attendance_data[user.user.get_full_name()] = round(attendance_rate * 100, 1) if attendance_rate else 0
+        current_month = timezone.now().month
+
+        for member in members:
+            records = ClassAttendanceRecord.objects.filter(
+                teacher=member.user,
+                date__month=current_month
+            )
+            if records.exists():
+                avg_status = records.aggregate(rate=Avg('status'))['rate']  # Assuming status is 1 (present) or 0 (absent)
+                attendance_data[member.user.get_full_name()] = round(avg_status * 100, 1)
+            else:
+                attendance_data[member.user.get_full_name()] = 0.0  # No data defaults to 0%
+
         return attendance_data
     except Department.DoesNotExist:
         return {}

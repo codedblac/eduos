@@ -1,27 +1,27 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+
 from .views import (
     BookViewSet,
     BookCopyViewSet,
-    BookBorrowRecordViewSet,
+    BorrowTransactionViewSet,
     LibraryMemberViewSet,
-    LibrarySupplierViewSet,
-    LibraryAcquisitionViewSet,
-    LibraryAIInsightsAPIView,
+    AcquisitionViewSet,
+    BookRatingViewSet,
+    BookRequestViewSet,
+    BookRecommendationViewSet,
 )
 
 router = DefaultRouter()
 router.register(r'books', BookViewSet, basename='book')
-router.register(r'book-copies', BookCopyViewSet, basename='bookcopy')
-router.register(r'borrow-records', BookBorrowRecordViewSet, basename='borrowrecord')
-router.register(r'members', LibraryMemberViewSet, basename='member')
-router.register(r'suppliers', LibrarySupplierViewSet, basename='supplier')
-router.register(r'acquisitions', LibraryAcquisitionViewSet, basename='acquisition')
+router.register(r'book-copies', BookCopyViewSet, basename='book-copy')
+router.register(r'borrow-transactions', BorrowTransactionViewSet, basename='borrow-transaction')
+router.register(r'members', LibraryMemberViewSet, basename='library-member')
+router.register(r'acquisitions', AcquisitionViewSet, basename='acquisition')
+router.register(r'ratings', BookRatingViewSet, basename='book-rating')
+router.register(r'requests', BookRequestViewSet, basename='book-request')
+router.register(r'recommendations', BookRecommendationViewSet, basename='book-recommendation')
 
 urlpatterns = [
-    # REST API endpoints for CRUD operations
     path('', include(router.urls)),
-
-    # AI-powered analytics endpoint
-    path('ai-insights/', LibraryAIInsightsAPIView.as_view(), name='library-ai-insights'),
 ]

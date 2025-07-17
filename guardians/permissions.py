@@ -3,34 +3,62 @@ from rest_framework import permissions
 
 class IsGuardianOrReadOnly(permissions.BasePermission):
     """
-    Allow full access to guardian on their own records,
-    read-only to others (e.g., teachers, admins).
+    Allows full access to the guardian who owns the profile, else read-only access.
     """
 
     def has_object_permission(self, request, view, obj):
-        # SAFE methods: GET, HEAD, OPTIONS
         if request.method in permissions.SAFE_METHODS:
             return True
 
-        # Only the guardian can edit their own profile/records
-        return hasattr(request.user, "guardian") and obj == request.user.guardian
+        return hasattr(request.user, 'guardian_profile') and obj.user == request.user
 
 
-class IsGuardianOwnerOfLink(permissions.BasePermission):
+class IsGuardianOfStudent(permissions.BasePermission):
     """
-    Only allow guardian to view/manage their own student links.
+    Allows access only if the authenticated guardian is linked to the student.
+    """
+
+    def has_permission(self, request, view):
+        user = request.user
+        return user.is_authenticated and hasattr(user, 'guardian_profile')
+
+    def has_object_permission(self, request, view, obj):
+        guardian = getattr(request.user, 'guardian_profile', None)
+        return guardian and obj.guardian == guardian
+
+
+class IsInstitutionAdminOrStaff(permissions.BasePermission):
+    """
+    Allow access only to users with admin/staff roles in the same institution.
+    """
+
+    def has_permission(self, request, view):
+        user = request.user
+        return (
+            user.is_authenticated and
+            hasattr(user, 'profile') and
+            user.profile.role in ['admin', 'super_admin', 'staff']
+        )
+
+
+class CanViewGuardianNotifications(permissions.BasePermission):
+    """
+    Allow guardians to view their own notifications.
+    Allow institution staff to view all guardian notifications.
     """
 
     def has_object_permission(self, request, view, obj):
-        if request.method in permissions.SAFE_METHODS:
-            return obj.guardian.user == request.user
-        return hasattr(request.user, "guardian") and obj.guardian.user == request.user
+        user = request.user
 
+        if not user.is_authenticated:
+            return False
 
-class IsGuardianNotificationRecipient(permissions.BasePermission):
-    """
-    Guardian can only see their own notifications.
-    """
+        # Guardian can view own
+        if hasattr(user, 'guardian_profile') and obj.guardian.user == user:
+            return True
 
-    def has_object_permission(self, request, view, obj):
-        return hasattr(request.user, "guardian") and obj.guardian.user == request.user
+        # Staff/admin of same institution
+        if hasattr(user, 'profile'):
+            return obj.institution == user.profile.institution and user.profile.role in ['admin', 'super_admin', 'staff']
+
+        return False

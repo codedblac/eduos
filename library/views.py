@@ -1,94 +1,125 @@
-from django.shortcuts import render
-
-# Create your views here.
 from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.db.models import Count, Q
+from django.db.models import Count, Avg, Q
+from django.utils import timezone
+
 from .models import (
-    LibraryBook, AccessionRecord, BorrowTransaction,
-    LibraryMember, ProcurementRecord
+    Book, BookCopy, BorrowTransaction, LibraryMember,
+    Acquisition, BookRating, BookRequest, BookRecommendation
 )
 from .serializers import (
-    LibraryBookSerializer, AccessionRecordSerializer,
-    BorrowTransactionSerializer, LibraryMemberSerializer,
-    ProcurementRecordSerializer
+    BookSerializer, BookCopySerializer, BorrowTransactionSerializer,
+    LibraryMemberSerializer, AcquisitionSerializer,
+    BookRatingSerializer, BookRequestSerializer, BookRecommendationSerializer
 )
 from .permissions import (
-    IsLibrarianOrAdmin, IsLibrarianOrReadOnly, IsMemberOrReadOnly
+    IsLibrarian, IsAdminOrLibrarian, IsOwnerOrReadOnly, IsInstitutionMember
 )
 from .filters import (
-    LibraryBookFilter, AccessionRecordFilter,
-    BorrowTransactionFilter, LibraryMemberFilter,
-    ProcurementRecordFilter
+    BookFilter, BookCopyFilter, BorrowTransactionFilter,
+    LibraryMemberFilter, AcquisitionFilter
 )
+from .ai import LibraryAI
 
-# ======== LibraryBook ViewSet ========
-class LibraryBookViewSet(viewsets.ModelViewSet):
-    queryset = LibraryBook.objects.all().select_related('subject')
-    serializer_class = LibraryBookSerializer
-    permission_classes = [IsAuthenticated, IsLibrarianOrReadOnly]
-    filterset_class = LibraryBookFilter
+
+# ========== Book ==========
+class BookViewSet(viewsets.ModelViewSet):
+    queryset = Book.objects.select_related('category', 'institution')
+    serializer_class = BookSerializer
+    permission_classes = [IsAuthenticated, IsLibrarian]
+    filterset_class = BookFilter
     search_fields = ['title', 'author', 'isbn', 'publisher']
 
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
-    def analytics(self, request):
-        top_borrowed = LibraryBook.objects.annotate(
-            borrow_count=Count('accessionrecord__borrowtransaction')
-        ).order_by('-borrow_count')[:10]
+    def top_borrowed(self, request):
+        books = LibraryAI.top_borrowed_books()
+        return Response(BookSerializer(books, many=True).data)
 
-        return Response({
-            'top_borrowed_books': LibraryBookSerializer(top_borrowed, many=True).data
-        })
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def inactive(self, request):
+        books = LibraryAI.inactive_books()
+        return Response(BookSerializer(books, many=True).data)
 
-# ======== AccessionRecord ViewSet ========
-class AccessionRecordViewSet(viewsets.ModelViewSet):
-    queryset = AccessionRecord.objects.select_related('book')
-    serializer_class = AccessionRecordSerializer
-    permission_classes = [IsAuthenticated, IsLibrarianOrReadOnly]
-    filterset_class = AccessionRecordFilter
+
+# ========== BookCopy ==========
+class BookCopyViewSet(viewsets.ModelViewSet):
+    queryset = BookCopy.objects.select_related('book')
+    serializer_class = BookCopySerializer
+    permission_classes = [IsAuthenticated, IsLibrarian]
+    filterset_class = BookCopyFilter
     search_fields = ['accession_number', 'book__title']
 
-# ======== BorrowTransaction ViewSet ========
+
+# ========== BorrowTransaction ==========
 class BorrowTransactionViewSet(viewsets.ModelViewSet):
-    queryset = BorrowTransaction.objects.select_related('member', 'accession__book')
+    queryset = BorrowTransaction.objects.select_related('user', 'book_copy__book')
     serializer_class = BorrowTransactionSerializer
-    permission_classes = [IsAuthenticated, IsMemberOrReadOnly]
+    permission_classes = [IsAuthenticated]
     filterset_class = BorrowTransactionFilter
-    search_fields = ['member__user__username', 'accession__accession_number']
+    search_fields = ['user__username', 'book_copy__accession_number']
 
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def overdue(self, request):
-        overdue_qs = self.queryset.filter(is_returned=False, due_date__lt=request.query_params.get('date'))
+        today = timezone.now().date()
+        overdue_qs = self.queryset.filter(returned_on__isnull=True, due_date__lt=today)
         return Response(self.serializer_class(overdue_qs, many=True).data)
 
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
-    def analytics(self, request):
-        data = {
-            'active_loans': self.queryset.filter(is_returned=False).count(),
-            'overdue_loans': self.queryset.filter(is_returned=False, due_date__lt=request.query_params.get('date')).count(),
-            'total_transactions': self.queryset.count(),
-        }
-        return Response(data)
+    def stats(self, request):
+        today = timezone.now().date()
+        return Response({
+            'active_loans': self.queryset.filter(returned_on__isnull=True).count(),
+            'overdue_loans': self.queryset.filter(returned_on__isnull=True, due_date__lt=today).count(),
+            'total_transactions': self.queryset.count()
+        })
 
-# ======== LibraryMember ViewSet ========
+
+# ========== LibraryMember ==========
 class LibraryMemberViewSet(viewsets.ModelViewSet):
-    queryset = LibraryMember.objects.select_related('user')
+    queryset = LibraryMember.objects.select_related('user', 'institution')
     serializer_class = LibraryMemberSerializer
-    permission_classes = [IsAuthenticated, IsLibrarianOrAdmin]
+    permission_classes = [IsAuthenticated, IsAdminOrLibrarian]
     filterset_class = LibraryMemberFilter
-    search_fields = ['user__username', 'membership_number']
+    search_fields = ['user__username', 'membership_id']
 
-# ======== ProcurementRecord ViewSet ========
-class ProcurementRecordViewSet(viewsets.ModelViewSet):
-    queryset = ProcurementRecord.objects.select_related('book', 'vendor')
-    serializer_class = ProcurementRecordSerializer
-    permission_classes = [IsAuthenticated, IsLibrarianOrAdmin]
-    filterset_class = ProcurementRecordFilter
-    search_fields = ['book__title', 'vendor']
+
+# ========== Acquisition ==========
+class AcquisitionViewSet(viewsets.ModelViewSet):
+    queryset = Acquisition.objects.select_related('book', 'vendor')
+    serializer_class = AcquisitionSerializer
+    permission_classes = [IsAuthenticated, IsAdminOrLibrarian]
+    filterset_class = AcquisitionFilter
+    search_fields = ['book__title', 'vendor__name']
 
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def stats(self, request):
-        yearly = ProcurementRecord.objects.extra(select={'year': "EXTRACT(year FROM date_procured)"}).values('year').annotate(total=Count('id'))
-        return Response({'yearly_procurement': yearly})
+        stats = self.queryset.extra(
+            select={'year': "EXTRACT(year FROM acquisition_date)"}
+        ).values('year').annotate(total=Count('id'))
+        return Response({'yearly_acquisitions': stats})
+
+
+# ========== BookRating ==========
+class BookRatingViewSet(viewsets.ModelViewSet):
+    queryset = BookRating.objects.select_related('user', 'book')
+    serializer_class = BookRatingSerializer
+    permission_classes = [IsAuthenticated, IsOwnerOrReadOnly]
+    search_fields = ['book__title', 'user__username']
+
+
+# ========== BookRequest ==========
+class BookRequestViewSet(viewsets.ModelViewSet):
+    queryset = BookRequest.objects.select_related('requested_by', 'institution')
+    serializer_class = BookRequestSerializer
+    permission_classes = [IsAuthenticated]
+    search_fields = ['title', 'author']
+
+
+# ========== BookRecommendation ==========
+class BookRecommendationViewSet(viewsets.ModelViewSet):
+    queryset = BookRecommendation.objects.select_related('book', 'recommended_to', 'institution')
+    serializer_class = BookRecommendationSerializer
+    permission_classes = [IsAuthenticated, IsLibrarian]
+    search_fields = ['book__title', 'recommended_to__username']

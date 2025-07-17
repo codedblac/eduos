@@ -67,7 +67,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         help_text="Only institutional users have this set. Public and GOV users have it null."
     )
 
-    # ✅ Added fields
+    #  Added fields
     profile_picture = models.ImageField(upload_to='user_avatars/', null=True, blank=True)
     reset_token = models.CharField(max_length=64, null=True, blank=True)
     reset_token_expiry = models.DateTimeField(null=True, blank=True)

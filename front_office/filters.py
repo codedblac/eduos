@@ -6,67 +6,67 @@ from .models import (
 
 
 class VisitorLogFilter(django_filters.FilterSet):
-    visit_date = django_filters.DateFromToRangeFilter()
-    visit_purpose = django_filters.CharFilter(lookup_expr='icontains')
-    visitor_name = django_filters.CharFilter(lookup_expr='icontains')
+    check_in__date = django_filters.DateFilter(field_name="check_in", lookup_expr="date")
+    check_out__isnull = django_filters.BooleanFilter(field_name="check_out", lookup_expr="isnull")
 
     class Meta:
         model = VisitorLog
-        fields = ['visit_date', 'visit_purpose', 'visitor_name', 'institution']
+        fields = ['name', 'national_id', 'phone', 'purpose', 'person_to_visit', 'institution']
 
 
 class AppointmentFilter(django_filters.FilterSet):
-    meeting_date = django_filters.DateFromToRangeFilter()
-    visitor_name = django_filters.CharFilter(lookup_expr='icontains')
-    meeting_with__email = django_filters.CharFilter(field_name='meeting_with__email', lookup_expr='icontains')
-    status = django_filters.ChoiceFilter(choices=Appointment.STATUS_CHOICES)
+    scheduled_time__date = django_filters.DateFilter(field_name="scheduled_time", lookup_expr="date")
 
     class Meta:
         model = Appointment
-        fields = ['meeting_date', 'visitor_name', 'meeting_with__email', 'status']
+        fields = ['visitor_name', 'meeting_with', 'status', 'institution']
 
 
 class ParcelDeliveryFilter(django_filters.FilterSet):
-    delivered_on = django_filters.DateFromToRangeFilter()
-    recipient_type = django_filters.CharFilter(lookup_expr='icontains')
-    sender_name = django_filters.CharFilter(lookup_expr='icontains')
+    received_on__date = django_filters.DateFilter(field_name="received_on", lookup_expr="date")
+    picked_up_on__date = django_filters.DateFilter(field_name="picked_up_on", lookup_expr="date")
 
     class Meta:
         model = ParcelDelivery
-        fields = ['recipient_type', 'status', 'delivered_on', 'sender_name']
+        fields = [
+            'recipient_student', 'recipient_staff', 'status',
+            'sender', 'received_by', 'picked_up_by', 'institution'
+        ]
 
 
 class GatePassFilter(django_filters.FilterSet):
-    exit_time = django_filters.DateFromToRangeFilter()
-    reason = django_filters.CharFilter(lookup_expr='icontains')
+    time_out__date = django_filters.DateFilter(field_name="time_out", lookup_expr="date")
+    time_in__isnull = django_filters.BooleanFilter(field_name="time_in", lookup_expr="isnull")
 
     class Meta:
         model = GatePass
-        fields = ['status', 'approved_by', 'exit_time', 'reason']
+        fields = [
+            'issued_to_student', 'issued_to_staff', 'reason',
+            'approved_by', 'is_returned', 'institution'
+        ]
 
 
 class FrontDeskTicketFilter(django_filters.FilterSet):
-    submitted_on = django_filters.DateFromToRangeFilter()
-    category = django_filters.CharFilter(lookup_expr='icontains')
-    status = django_filters.ChoiceFilter(choices=FrontDeskTicket.STATUS_CHOICES)
+    created_on__date = django_filters.DateFilter(field_name="created_on", lookup_expr="date")
 
     class Meta:
         model = FrontDeskTicket
-        fields = ['status', 'category', 'submitted_on']
+        fields = ['category', 'status', 'submitted_by', 'institution']
 
 
 class FrontAnnouncementFilter(django_filters.FilterSet):
-    created_on = django_filters.DateFromToRangeFilter()
+    display_from__date = django_filters.DateFilter(field_name="display_from", lookup_expr="date")
+    display_until__date = django_filters.DateFilter(field_name="display_until", lookup_expr="date")
 
     class Meta:
         model = FrontAnnouncement
-        fields = ['institution', 'created_on']
+        fields = ['title', 'created_by', 'institution']
 
 
 class SecurityLogFilter(django_filters.FilterSet):
-    timestamp = django_filters.DateFromToRangeFilter()
-    entry_type = django_filters.ChoiceFilter(choices=SecurityLog.ENTRY_TYPE_CHOICES)
+    time_in__date = django_filters.DateFilter(field_name="time_in", lookup_expr="date")
+    time_out__isnull = django_filters.BooleanFilter(field_name="time_out", lookup_expr="isnull")
 
     class Meta:
         model = SecurityLog
-        fields = ['entry_type', 'recorded_by', 'timestamp', 'person_name']
+        fields = ['entry_type', 'name_or_plate', 'recorded_by', 'institution']
