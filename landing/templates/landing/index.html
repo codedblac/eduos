@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -127,8 +128,8 @@
 
 <header>
   <div class="logo">
-    <img src="/static/eduos-logo.png" alt="EduOS Logo">
-    <span>EduOS Server</span>
+    <img src="{% static 'images/eduos-logo.png' %}" alt="EduOS Logo">
+    <span style="font-size: 1.4rem; font-weight: 600;">EduOS Server</span>
   </div>
   <nav>
     <a href="/">Home</a>
@@ -191,12 +192,12 @@
   <div class="card"><h3>Access Control</h3><p>Roles & permissions</p></div>
   <div class="card"><h3>Audit Logs</h3><p>Activity tracking</p></div>
   <div class="card"><h3>Landing</h3><p>Public-facing page</p></div>
-    <
+    
   </div>
 </section>
 
 <footer>
-  &copy; {{ year }} EduOS Backend · All rights reserved.
+  &copy; {{ year|default:"2025" }} EduOS Backend · All rights reserved.
 </footer>
 
 </body>
