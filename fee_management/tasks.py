@@ -11,6 +11,26 @@ from students.models import Student
 from academics.models import Term
 from django.conf import settings
 
+from celery import shared_task
+from .models import RefundRequest, Payment
+from .utils import process_refund, generate_receipt, calculate_invoice_balance
+
+@shared_task
+def task_process_refund(refund_id):
+    refund = RefundRequest.objects.get(id=refund_id)
+    if refund.status == 'approved':
+        process_refund(refund)
+
+
+@shared_task
+def task_generate_receipt(payment_id):
+    payment = Payment.objects.get(id=payment_id)
+    if payment.status == 'confirmed':
+        generate_receipt(payment)
+        calculate_invoice_balance(payment.invoice)
+
+
+
 
 @shared_task
 def auto_generate_term_invoices():

@@ -22,6 +22,40 @@ from .filters import (
     RefundRequestFilter, PenaltyFilter
 )
 
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from .utils import (
+    get_student_outstanding_balance, apply_penalty,
+    get_applicable_fee_structure, sum_bursaries
+)
+
+class StudentOutstandingBalanceView(APIView):
+    def get(self, request, student_id, term_id, year_id):
+        from students.models import Student
+        from academics.models import Term, AcademicYear
+
+        student = Student.objects.get(id=student_id)
+        term = Term.objects.get(id=term_id)
+        year = AcademicYear.objects.get(id=year_id)
+
+        balance = get_student_outstanding_balance(student, term, year)
+        return Response({'outstanding_balance': balance})
+
+
+class ApplyPenaltyView(APIView):
+    def post(self, request):
+        from students.models import Student
+        student = Student.objects.get(id=request.data['student_id'])
+        term = request.data['term_id']
+        reason = request.data['reason']
+        amount = request.data['amount']
+
+        penalty = apply_penalty(student, term, reason, amount)
+        return Response({'penalty_id': penalty.id}, status=status.HTTP_201_CREATED)
+
+
+
 class FeeItemViewSet(viewsets.ModelViewSet):
     queryset = FeeItem.objects.all()
     serializer_class = FeeItemSerializer

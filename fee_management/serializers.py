@@ -6,6 +6,47 @@ from .models import (
 from students.models import Student
 from accounts.models import CustomUser
 
+from rest_framework import serializers
+from .models import Invoice, Payment, RefundRequest, InvoiceItem
+from .utils import calculate_invoice_balance, generate_receipt, process_refund
+
+class InvoiceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Invoice
+        fields = '__all__'
+
+    def update(self, instance, validated_data):
+        instance = super().update(instance, validated_data)
+        calculate_invoice_balance(instance)
+        return instance
+
+
+class PaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = '__all__'
+
+    def create(self, validated_data):
+        payment = super().create(validated_data)
+        if payment.status == 'confirmed':
+            calculate_invoice_balance(payment.invoice)
+            generate_receipt(payment)
+        return payment
+
+
+class RefundRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RefundRequest
+        fields = '__all__'
+
+    def update(self, instance, validated_data):
+        instance = super().update(instance, validated_data)
+        if instance.status == 'approved' and not instance.refunded_on:
+            process_refund(instance)
+        return instance
+
+
+
 
 class FeeItemSerializer(serializers.ModelSerializer):
     class Meta:

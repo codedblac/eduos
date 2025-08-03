@@ -6,6 +6,26 @@ from .tasks import generate_digital_receipts
 from notifications.utils import notify_user
 
 
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from .models import Payment, RefundRequest
+from .utils import calculate_invoice_balance, generate_receipt, process_refund
+
+@receiver(post_save, sender=Payment)
+def auto_handle_payment(sender, instance, created, **kwargs):
+    if created and instance.status == 'confirmed':
+        calculate_invoice_balance(instance.invoice)
+        generate_receipt(instance)
+
+
+@receiver(post_save, sender=RefundRequest)
+def auto_process_refund(sender, instance, **kwargs):
+    if instance.status == 'approved' and not instance.refunded_on:
+        process_refund(instance)
+
+
+
+
 @receiver(post_save, sender=Payment)
 def auto_generate_receipt(sender, instance, created, **kwargs):
     if created:
