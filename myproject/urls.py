@@ -5,6 +5,7 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/v1/accounts/', include('accounts.urls')),
@@ -50,6 +51,7 @@ urlpatterns = [
     path('api/v1/fee-management/', include('fee_management.urls')),
     path('api/v1/e-wallet/', include('e_wallet.urls')),
     path('api/v1/access-control/', include('access_control.urls')),
+    path('', include('landing.urls')),
 ]
 
 if settings.DEBUG:
