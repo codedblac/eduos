@@ -21,6 +21,7 @@ from accounts.serializers import (
     ChangePasswordSerializer,
     PasswordResetRequestSerializer,  
     PasswordResetConfirmSerializer,
+    EmailTokenObtainPairSerializer,
 )
 from accounts.permissions import (
     IsSuperAdmin,
@@ -29,6 +30,7 @@ from accounts.permissions import (
 )
 from accounts.filters import UserFilter
 from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 User = get_user_model()
 
@@ -214,3 +216,7 @@ class PasswordResetConfirmView(views.APIView):
         user.set_password(serializer.validated_data["new_password"])
         user.save()
         return Response({"detail": "Password has been reset successfully."})
+
+
+class EmailTokenObtainPairView(TokenObtainPairView):
+    serializer_class = EmailTokenObtainPairSerializer
