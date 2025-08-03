@@ -6,6 +6,15 @@ from .models import (
 )
 
 
+from django.contrib import admin
+from .models import SubjectAssignment
+
+@admin.register(SubjectAssignment)
+class SubjectAssignmentAdmin(admin.ModelAdmin):
+    list_display = ('subject', 'teacher', 'class_level', 'stream', 'term', 'academic_year')
+    list_filter = ('term', 'academic_year', 'institution', 'class_level')
+
+
 @admin.register(SubjectCategory)
 class SubjectCategoryAdmin(admin.ModelAdmin):
     list_display = ('name', 'description')

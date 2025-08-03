@@ -4,6 +4,12 @@ from .models import (
     SubjectPrerequisite, SubjectAssessmentWeight, SubjectGradingScheme,
     SubjectResource, SubjectVersion, SubjectAnalyticsLog
 )
+from .models import Subject, SubjectAssignment
+from rest_framework import serializers
+from .models import SubjectAssignment
+from classes.serializers import ClassLevelSerializer, StreamSerializer
+from institutions.serializers import InstitutionSerializer
+from teachers.serializers import TeacherSerializer
 from classes.models import ClassLevel
 from teachers.models import Teacher
 from academics.models import Term
@@ -141,3 +147,19 @@ class SubjectAnalyticsLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = SubjectAnalyticsLog
         fields = ['id', 'subject', 'average_score', 'highest_score', 'lowest_score', 'recorded_at']
+
+class SubjectAssignmentSerializer(serializers.ModelSerializer):
+    institution = InstitutionSerializer(read_only=True)
+    institution_id = serializers.PrimaryKeyRelatedField(source='institution', queryset=SubjectAssignment._meta.get_field('institution').related_model.objects.all(), write_only=True)
+    subject = SubjectSerializer(read_only=True)
+    subject_id = serializers.PrimaryKeyRelatedField(source='subject', queryset=SubjectAssignment._meta.get_field('subject').related_model.objects.all(), write_only=True)
+    teacher = TeacherSerializer(read_only=True)
+    teacher_id = serializers.PrimaryKeyRelatedField(source='teacher', queryset=SubjectAssignment._meta.get_field('teacher').related_model.objects.all(), write_only=True)
+    class_level = ClassLevelSerializer(read_only=True)
+    class_level_id = serializers.PrimaryKeyRelatedField(source='class_level', queryset=SubjectAssignment._meta.get_field('class_level').related_model.objects.all(), write_only=True)
+    stream = StreamSerializer(read_only=True)
+    stream_id = serializers.PrimaryKeyRelatedField(source='stream', queryset=SubjectAssignment._meta.get_field('stream').related_model.objects.all(), write_only=True, required=False, allow_null=True)
+
+    class Meta:
+        model = SubjectAssignment
+        fields = '__all__'

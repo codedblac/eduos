@@ -3,6 +3,11 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
+from rest_framework import viewsets
+from .models import SubjectAssignment
+from .serializers import SubjectAssignmentSerializer
+from rest_framework.permissions import IsAuthenticated
+
 from .models import (
     Subject, SubjectClassLevel, SubjectTeacher,
     SubjectCategory, SubjectPrerequisite,
@@ -136,3 +141,9 @@ class SubjectAnalyticsView(APIView):
             "teacher_subject_loads": SubjectAnalytics.teacher_subject_load_distribution(institution_id),
         }
         return Response(data)
+
+
+class SubjectAssignmentViewSet(viewsets.ModelViewSet):
+    queryset = SubjectAssignment.objects.all()
+    serializer_class = SubjectAssignmentSerializer
+    permission_classes = [IsAuthenticated]

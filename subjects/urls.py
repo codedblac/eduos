@@ -15,6 +15,14 @@ from .views import (
     SubjectAnalyticsView
 )
 
+from rest_framework.routers import DefaultRouter
+from .views import SubjectAssignmentViewSet
+
+router = DefaultRouter()
+router.register(r'subject-assignments', SubjectAssignmentViewSet, basename='subject-assignment')
+
+urlpatterns = router.urls
+
 router = DefaultRouter()
 router.register(r'subjects', SubjectViewSet, basename='subjects')
 router.register(r'subject-class-levels', SubjectClassLevelViewSet, basename='subject-class-levels')

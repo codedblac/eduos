@@ -1,7 +1,7 @@
 from django.db.models import Count, Avg, Q
 from teachers.models import Teacher
 from timetable.models import PeriodTemplate
-# from subjects.models import SubjectAssignment
+from subjects.models import SubjectAssignment
 from exams.models import ExamResult
 from classes.models import Stream, ClassLevel
 from datetime import date

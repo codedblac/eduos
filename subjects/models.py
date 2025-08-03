@@ -1,7 +1,7 @@
 from django.db import models
 from django.utils import timezone
 from institutions.models import Institution
-from classes.models import ClassLevel
+from classes.models import ClassLevel, Stream
 from teachers.models import Teacher
 from academics.models import Term
 from accounts.models import CustomUser
@@ -159,3 +159,27 @@ class SubjectAnalyticsLog(models.Model):
 
     def __str__(self):
         return f"{self.subject.name} Analytics @ {self.recorded_at.strftime('%Y-%m-%d %H:%M')}"
+
+
+class SubjectAssignment(models.Model):
+    institution = models.ForeignKey(Institution, on_delete=models.CASCADE)
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
+    teacher = models.ForeignKey(Teacher, on_delete=models.CASCADE)
+    class_level = models.ForeignKey(ClassLevel, on_delete=models.CASCADE)
+    stream = models.ForeignKey(Stream, on_delete=models.CASCADE, null=True, blank=True)  # Optional
+
+    academic_year = models.PositiveIntegerField()
+    term = models.CharField(max_length=10, choices=[
+        ('term1', 'Term 1'),
+        ('term2', 'Term 2'),
+        ('term3', 'Term 3'),
+    ])
+
+    assigned_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('institution', 'subject', 'teacher', 'class_level', 'stream', 'term', 'academic_year')
+        ordering = ['-academic_year', 'term']
+
+    def __str__(self):
+        return f"{self.subject.name} - {self.teacher.get_full_name()} - {self.class_level} ({self.term} {self.academic_year})"
