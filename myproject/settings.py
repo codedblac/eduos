@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 from datetime import timedelta
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -232,17 +233,14 @@ AUTH_USER_MODEL = 'accounts.CustomUser'
 
 
 
-CELERY_BROKER_URL = 'redis://localhost:6379/0'
-
-# Optional: Store task results
-CELERY_RESULT_BACKEND = 'redis://localhost:6379/1'
-
-# Optional: Timezone and task options
+# Celery
+CELERY_BROKER_URL = f"{REDIS_URL}/0"
+CELERY_RESULT_BACKEND = f"{REDIS_URL}/1"
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Africa/Nairobi'
-
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+
 
 
 
@@ -264,7 +262,7 @@ CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            "hosts": [('127.0.0.1', 6379)],
+            "hosts": [REDIS_URL],
         },
     },
 }
