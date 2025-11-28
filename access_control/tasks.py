@@ -26,13 +26,13 @@ def log_role_assignment_change(actor_id, user_id, institution_id, role_id, actio
     try:
         actor = User.objects.get(id=actor_id)
         user = User.objects.get(id=user_id)
-        role = Role.objects.get(id=role_id)
+        primary_role= Role.objects.get(id=role_id)
         institution = Institution.objects.get(id=institution_id)
 
         RoleAuditLog.objects.create(
             actor=actor,
             target_user=user,
-            role=role,
+            primary_role=role,
             institution=institution,
             action=action,
             notes=notes
@@ -50,7 +50,7 @@ def log_permission_change(actor_id, permission_id, role_id, action, notes=""):
     try:
         actor = User.objects.get(id=actor_id)
         permission = Permission.objects.get(id=permission_id)
-        role = Role.objects.get(id=role_id)
+        primary_role= Role.objects.get(id=role_id)
 
         PermissionAuditLog.objects.create(
             actor=actor,
@@ -71,7 +71,7 @@ def bulk_assign_role(user_ids, role_id, institution_id, assigned_by_id, notes=""
     """
     try:
         assigned_by = User.objects.get(id=assigned_by_id)
-        role = Role.objects.get(id=role_id)
+        primary_role= Role.objects.get(id=role_id)
         institution = Institution.objects.get(id=institution_id)
 
         with transaction.atomic():
@@ -79,7 +79,7 @@ def bulk_assign_role(user_ids, role_id, institution_id, assigned_by_id, notes=""
                 user = User.objects.get(id=user_id)
                 assignment, created = UserRoleAssignment.objects.update_or_create(
                     user=user,
-                    role=role,
+                    primary_role=role,
                     institution=institution,
                     defaults={"is_active": True}
                 )
@@ -102,8 +102,8 @@ def sync_permissions_for_role(role_id):
     Removes orphaned links or ensures correct state.
     """
     try:
-        role = Role.objects.get(id=role_id)
-        linked_permissions = RolePermission.objects.filter(role=role)
+        primary_role= Role.objects.get(id=role_id)
+        linked_permissions = RolePermission.objects.filter(primary_role=role)
 
         # Optional business rules or cleanup can go here
         seen = set()

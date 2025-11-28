@@ -2,19 +2,34 @@ from django.urls import path
 from institutions import views
 
 urlpatterns = [
-    #  Institution Management
+    # =============================
+    # 🏫 Institution Management
+    # =============================
     path('', views.InstitutionListView.as_view(), name='institution-list'),
     path('create/', views.InstitutionCreateView.as_view(), name='institution-create'),
-    path('<int:pk>/', views.InstitutionDetailView.as_view(), name='institution-detail'),
+    path('<uuid:pk>/', views.InstitutionDetailView.as_view(), name='institution-detail'),
     path('me/', views.MyInstitutionView.as_view(), name='my-institution'),
 
-    #  School Accounts
-    path('<int:institution_id>/accounts/', views.SchoolAccountListCreateView.as_view(), name='schoolaccount-list-create'),
-    path('accounts/<int:pk>/', views.SchoolAccountDetailView.as_view(), name='schoolaccount-detail'),
+    # =============================
+    # 📝 School Registration Requests
+    # =============================
+    path('registrations/', views.SchoolRegistrationRequestListView.as_view(), name='schoolregistration-list'),
+    path('registrations/create/', views.SchoolRegistrationRequestCreateView.as_view(), name='schoolregistration-create'),
+    path('registrations/<uuid:pk>/approve/', views.SchoolRegistrationRequestApproveView.as_view(), name='schoolregistration-approve'),
 
-    #  AI Features 
+    # =============================
+    # 💳 School Accounts
+    # =============================
+    path('<uuid:institution_id>/accounts/', views.SchoolAccountListCreateView.as_view(), name='schoolaccount-list-create'),
+    path('accounts/<uuid:pk>/', views.SchoolAccountDetailView.as_view(), name='schoolaccount-detail'),
+
+    # =============================
+    # 🤖 AI Features 
+    # =============================
     path('ai/recommendation/', views.InstitutionAIRecommendationView.as_view(), name='institution-ai-recommendation'),
 
-    #  Analytics 
+    # =============================
+    # 📊 Analytics 
+    # =============================
     path('analytics/overview/', views.InstitutionAnalyticsOverviewView.as_view(), name='institution-analytics-overview'),
 ]

@@ -79,10 +79,10 @@ def get_announcement_recipients(announcement):
     for target in targets:
         if target.user:
             users.add(target.user)
-        elif target.role:
-            users.update(CustomUser.objects.filter(role=target.role))
+        elif target.primary_role:
+            users.update(CustomUser.objects.filter(primary_role=target.primary_role))
         elif target.class_level or target.stream:
-            qs = CustomUser.objects.filter(role="student")
+            qs = CustomUser.objects.filter(primary_role="student")
             if target.class_level:
                 qs = qs.filter(student_profile__class_level=target.class_level)
             if target.stream:

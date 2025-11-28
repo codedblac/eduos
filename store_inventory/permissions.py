@@ -21,9 +21,9 @@ class IsStoreManagerOrReadOnly(permissions.BasePermission):
             return False
         if request.method in permissions.SAFE_METHODS:
             return hasattr(request.user, 'institution')
-        return request.user.role in ['admin', 'store_manager']
+        return request.user.primary_role in ['admin', 'store_manager']
 
     def has_object_permission(self, request, view, obj):
         if request.method in permissions.SAFE_METHODS:
             return obj.institution == request.user.institution
-        return request.user.role in ['admin', 'store_manager'] and obj.institution == request.user.institution
+        return request.user.primary_role in ['admin', 'store_manager'] and obj.institution == request.user.institution

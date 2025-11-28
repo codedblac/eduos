@@ -15,7 +15,7 @@ class SchoolAttendanceFilter(django_filters.FilterSet):
     date = django_filters.DateFilter(field_name="date", lookup_expr="exact")
     date_range = django_filters.DateFromToRangeFilter(field_name="date")
     user = django_filters.ModelChoiceFilter(queryset=CustomUser.objects.all())
-    role = django_filters.CharFilter(method="filter_by_role")
+    primary_role= django_filters.CharFilter(method="filter_by_role")
 
     class Meta:
         model = SchoolAttendanceRecord

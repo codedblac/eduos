@@ -1,25 +1,42 @@
 from django.urls import path
-from accounts import views
-from .views import EmailTokenObtainPairView
+from accounts.views import (
+    CreateInstitutionAdminView,
+    RegisterView,
+    CustomLoginView,  # Optional: only if still using token-based login
+    EmailTokenObtainPairView,  # JWT login
+    ChangePasswordView,
+    ForgotPasswordView,
+    PasswordResetConfirmView,
+    UserListCreateView,
+    UserDetailView,
+    MeView,
+    SwitchAccountView,
+    UserRolesView,
+)
 
 urlpatterns = [
-    #  Authentication
-    path('auth/register/', views.RegisterView.as_view(), name='register'),
-    path('auth/login/', EmailTokenObtainPairView.as_view(), name='login'),
-    path('auth/change-password/', views.ChangePasswordView.as_view(), name='change-password'),
-    path('auth/forgot-password/', views.ForgotPasswordView.as_view(), name='forgot-password'),
-    path('auth/reset-password/<uidb64>/<token>/', views.PasswordResetConfirmView.as_view(), name='reset-password'),
+    # Institution Admin Creation
+    path("institution-admins/create/", CreateInstitutionAdminView.as_view(), name="create-institution-admin"),
 
-    #  User Management
-    path('users/', views.UserListCreateView.as_view(), name='user-list-create'),
-    path('users/<int:pk>/', views.UserDetailView.as_view(), name='user-detail'),
+    # Authentication
+    path('auth/register/', RegisterView.as_view(), name='register'),
+    path('auth/login/', EmailTokenObtainPairView.as_view(), name='login'),  # JWT-based login
+    # path('auth/login-token/', CustomLoginView.as_view(), name='login-token'),  # OPTIONAL: remove if not used
 
-    #  Current Profile
-    path('me/', views.MeView.as_view(), name='user-me'),
+    path('auth/change-password/', ChangePasswordView.as_view(), name='change-password'),
+    path('auth/forgot-password/', ForgotPasswordView.as_view(), name='forgot-password'),
+    path('auth/reset-password/<uidb64>/<token>/', PasswordResetConfirmView.as_view(), name='reset-password'),
 
-    #  Account Switching
-    path('switch-account/', views.SwitchAccountView.as_view(), name='switch-account'),
+    # User Management
+    path('users/', UserListCreateView.as_view(), name='user-list-create'),
+    path('users/<int:pk>/', UserDetailView.as_view(), name='user-detail'),
 
-    #  Roles Listing
-    path('roles/', views.UserRolesView.as_view(), name='user-roles'),
+    # Current Profile Access
+    path('me/', MeView.as_view(), name='user-me'),
+
+    # Account Switching
+    path('switch-account/', SwitchAccountView.as_view(), name='switch-account'),
+
+    # Roles Listing
+    path('roles/', UserRolesView.as_view(), name='user-roles'),
 ]

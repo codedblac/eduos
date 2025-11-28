@@ -22,28 +22,28 @@ class BaseInstitutionAdmin(admin.ModelAdmin):
 @admin.register(ItemCategory)
 class ItemCategoryAdmin(BaseInstitutionAdmin):
     list_display = ['name', 'institution', 'created_at']
-    search_fields = ['name']
+    search_fields = []
     list_filter = ['institution']
 
 
 @admin.register(ItemUnit)
 class ItemUnitAdmin(BaseInstitutionAdmin):
     list_display = ['name', 'abbreviation', 'institution']
-    search_fields = ['name', 'abbreviation']
+    search_fields = [ 'abbreviation']
     list_filter = ['institution']
 
 
 @admin.register(Item)
 class ItemAdmin(BaseInstitutionAdmin):
     list_display = ['name', 'category', 'unit', 'min_stock_level', 'institution']
-    search_fields = ['name', 'description']
+    search_fields = [ 'description']
     list_filter = ['institution', 'category', 'unit']
 
 
 @admin.register(Supplier)
 class SupplierAdmin(BaseInstitutionAdmin):
     list_display = ['name', 'contact_person', 'phone', 'email', 'institution']
-    search_fields = ['name', 'contact_person']
+    search_fields = [ 'contact_person']
     list_filter = ['institution']
 
 

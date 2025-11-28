@@ -8,7 +8,7 @@ class IsHRStaff(permissions.BasePermission):
     """
 
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role == 'hr'
+        return request.user.is_authenticated and request.user.primary_role== 'hr'
 
 class IsSelfOrHR(permissions.BasePermission):
     """
@@ -17,7 +17,7 @@ class IsSelfOrHR(permissions.BasePermission):
 
     def has_object_permission(self, request, view, obj):
         return request.user.is_authenticated and (
-            request.user == obj.user or request.user.role == 'hr'
+            request.user == obj.user or request.user.primary_role== 'hr'
         )
 
 class IsHROrReadOnly(permissions.BasePermission):
@@ -28,7 +28,7 @@ class IsHROrReadOnly(permissions.BasePermission):
     def has_permission(self, request, view):
         if request.method in permissions.SAFE_METHODS:
             return True
-        return request.user.is_authenticated and request.user.role == 'hr'
+        return request.user.is_authenticated and request.user.primary_role== 'hr'
 
 class IsHROrInstitutionAdmin(permissions.BasePermission):
     """
@@ -37,5 +37,5 @@ class IsHROrInstitutionAdmin(permissions.BasePermission):
 
     def has_permission(self, request, view):
         return request.user.is_authenticated and (
-            request.user.role in ['hr', 'admin', 'institution_admin']
+            request.user.primary_role in ['hr', 'admin', 'institution_admin']
         )

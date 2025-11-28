@@ -103,7 +103,7 @@ class MaintenanceLog(models.Model):
 
 class MaintenanceStaff(models.Model):
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
-    role = models.CharField(max_length=100, choices=[
+    primary_role= models.CharField(max_length=100, choices=[
         ('technician', 'Technician'),
         ('supervisor', 'Supervisor'),
         ('external_contractor', 'External Contractor'),
@@ -114,7 +114,7 @@ class MaintenanceStaff(models.Model):
     institution = models.ForeignKey(Institution, on_delete=models.CASCADE)
 
     def __str__(self):
-        return f"{self.user.get_full_name()} - {self.role}"
+        return f"{self.user.get_full_name()} - {self.primary_role}"
 
 
 class PreventiveMaintenance(models.Model):

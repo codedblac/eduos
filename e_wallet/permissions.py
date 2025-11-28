@@ -13,7 +13,7 @@ class IsAdminOrFinance(permissions.BasePermission):
         user = request.user
         return user.is_authenticated and (
             user.is_superuser or
-            user.role in ['admin', 'finance', 'bursar', 'principal']
+            user.primary_role in ['admin', 'finance', 'bursar', 'principal']
         )
 
 
@@ -23,7 +23,7 @@ class IsParent(permissions.BasePermission):
     """
 
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role == 'parent'
+        return request.user.is_authenticated and request.user.primary_role== 'parent'
 
 
 class IsStudent(permissions.BasePermission):
@@ -32,7 +32,7 @@ class IsStudent(permissions.BasePermission):
     """
 
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role == 'student'
+        return request.user.is_authenticated and request.user.primary_role== 'student'
 
 
 class IsTeacher(permissions.BasePermission):
@@ -41,7 +41,7 @@ class IsTeacher(permissions.BasePermission):
     """
 
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role == 'teacher'
+        return request.user.is_authenticated and request.user.primary_role== 'teacher'
 
 
 class IsOwnerOrReadOnly(permissions.BasePermission):
@@ -54,15 +54,15 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
         user = request.user
 
         # Admin override
-        if user.is_superuser or user.role in ['admin', 'finance']:
+        if user.is_superuser or user.primary_role in ['admin', 'finance']:
             return True
 
         # Student access to own wallet
-        if hasattr(obj, 'student') and user.role == 'student':
+        if hasattr(obj, 'student') and user.primary_role== 'student':
             return obj.student.user == user
 
         # Parent access to child's wallet
-        if hasattr(obj, 'student') and user.role == 'parent':
+        if hasattr(obj, 'student') and user.primary_role== 'parent':
             return obj.student.guardians.filter(id=user.id).exists()
 
         # Safe methods allowed for everyone with permission
@@ -75,7 +75,7 @@ class CanInitiateMicroFees(permissions.BasePermission):
     """
 
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role in ['teacher', 'admin']
+        return request.user.is_authenticated and request.user.primary_role in ['teacher', 'admin']
 
 
 class IsOwnerOrStaff(permissions.BasePermission):
@@ -86,13 +86,13 @@ class IsOwnerOrStaff(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         user = request.user
 
-        if user.is_superuser or user.role in ['admin', 'finance']:
+        if user.is_superuser or user.primary_role in ['admin', 'finance']:
             return True
 
         if hasattr(obj, 'parent') and obj.parent == user:
             return True
 
-        if hasattr(obj, 'student') and user.role == 'student':
+        if hasattr(obj, 'student') and user.primary_role== 'student':
             return obj.student.user == user
 
         return request.method in permissions.SAFE_METHODS

@@ -89,7 +89,7 @@ def send_daily_attendance_summary():
             f"STUDENTS: {students_present}/{students_total} present"
         )
 
-        admins = CustomUser.objects.filter(institution=inst, role='ADMIN', is_active=True)
+        admins = CustomUser.objects.filter(institution=inst, primary_role='ADMIN', is_active=True)
         to_emails = [admin.email for admin in admins if admin.email]
 
         if to_emails:

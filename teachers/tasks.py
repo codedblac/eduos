@@ -22,7 +22,7 @@ def run_teacher_ai_analysis(institution_id):
             teacher.ai_insights = "\n".join(summary.get("insights", []))
             teacher.recommended_subjects = summary.get("recommendations", [])
             teacher.student_feedback_summary = summary.get("feedback_summary", "")
-            teacher.save(update_fields=[
+            teacher.save(update_fields = [
                 "performance_score",
                 "ai_insights",
                 "recommended_subjects",
@@ -60,7 +60,7 @@ def flag_inactive_teachers(days=60):
 
     for teacher in inactive_teachers:
         teacher.is_active = False
-        teacher.save(update_fields=["is_active"])
+        teacher.save(update_fields = ["is_active"])
 
         admins = teacher.institution.customuser_set.filter(is_staff=True)
         for admin in admins:

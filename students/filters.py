@@ -19,9 +19,7 @@ class StudentFilter(django_filters.FilterSet):
         fields = [
             'first_name', 'last_name', 'admission_number',
             'gender', 'enrollment_status',
-            'class_level', 'stream', 'institution',
-            'date_joined_after', 'date_joined_before'
-        ]
+            'class_level', 'stream', 'institution']
 
 
 class StudentHistoryFilter(django_filters.FilterSet):

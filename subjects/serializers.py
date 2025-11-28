@@ -25,7 +25,7 @@ class SubjectCategorySerializer(serializers.ModelSerializer):
 class ClassLevelSerializer(serializers.ModelSerializer):
     class Meta:
         model = ClassLevel
-        fields = ['id', 'name', 'code']
+        fields = ['id', 'code']
 
 
 class TeacherSerializer(serializers.ModelSerializer):
@@ -69,11 +69,10 @@ class SubjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subject
         fields = [
-            'id', 'name', 'code', 'description', 'is_elective', 'is_core',
+            'id', 'code', 'description', 'is_elective', 'is_core',
             'institution', 'category', 'category_id', 'curriculum_type', 'curriculum_display',
             'is_active', 'archived', 'created_at', 'updated_at',
-            'class_levels', 'assigned_teachers',
-        ]
+            'class_levels', 'assigned_teachers']
 
     def get_class_levels(self, obj):
         return SubjectClassLevelSerializer(obj.class_levels.all(), many=True).data

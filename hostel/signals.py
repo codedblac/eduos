@@ -13,7 +13,7 @@ def notify_room_allocation(sender, instance, created, **kwargs):
             recipient=instance.student.user,
             title="Room Allocation",
             message=message,
-            role='student',
+            primary_role='student',
             institution=instance.institution
         )
 
@@ -25,7 +25,7 @@ def notify_leave_request(sender, instance, created, **kwargs):
             recipient=instance.student.user,
             title="Leave Request Submitted",
             message=f"Your leave request from {instance.leave_date} to {instance.return_date} has been submitted.",
-            role='student',
+            primary_role='student',
             institution=instance.institution
         )
     elif instance.approved:
@@ -33,7 +33,7 @@ def notify_leave_request(sender, instance, created, **kwargs):
             recipient=instance.student.user,
             title="Leave Approved",
             message=f"Your leave request has been approved.",
-            role='student',
+            primary_role='student',
             institution=instance.institution
         )
 
@@ -45,6 +45,6 @@ def notify_violation_reported(sender, instance, created, **kwargs):
             recipient=instance.reported_by,
             title="Violation Report Logged",
             message=f"Violation in room {instance.room.name} reported.",
-            role='admin',
+            primary_role='admin',
             institution=instance.institution
         )

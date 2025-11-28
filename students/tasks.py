@@ -27,7 +27,7 @@ def run_ai_analysis_on_students(institution_id):
         student.performance_comments = result.get("feedback_comment", "")
         student.recommended_books = student.recommended_books or []
         student.recommended_teachers = student.recommended_teachers or []
-        student.save(update_fields=[
+        student.save(update_fields = [
             "ai_insights", "performance_comments", "recommended_books", "recommended_teachers"
         ])
 
@@ -48,7 +48,7 @@ def promote_students():
         if next_level:
             old_level = student.class_level
             student.class_level = next_level
-            student.save(update_fields=['class_level'])
+            student.save(update_fields = ['class_level'])
 
             StudentHistory.objects.create(
                 student=student,
@@ -97,7 +97,7 @@ def identify_transfer_candidates():
 
     for student in inactive_students:
         student.enrollment_status = 'inactive'
-        student.save(update_fields=['enrollment_status'])
+        student.save(update_fields = ['enrollment_status'])
 
         StudentHistory.objects.create(
             student=student,

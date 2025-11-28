@@ -3,31 +3,30 @@ from accounts.models import CustomUser
 
 
 class IsSuperAdmin(permissions.BasePermission):
-    """
-    Allows access only to super admins.
-    """
+    """Allow access only to super admins."""
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role == CustomUser.Role.SUPER_ADMIN
+        return (
+            request.user.is_authenticated and
+            request.user.primary_role == CustomUser.Role.SUPER_ADMIN
+        )
 
 
 class IsInstitutionAdmin(permissions.BasePermission):
-    """
-    Allows access only to institution (school) admins.
-    """
+    """Allow access only to institution admins."""
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role == CustomUser.Role.ADMIN
+        return (
+            request.user.is_authenticated and
+            request.user.primary_role == CustomUser.Role.INSTITUTION_ADMIN
+        )
 
 
 class IsInstitutionStaff(permissions.BasePermission):
-    """
-    Allows access only to institutional users (staff, teacher, etc.).
-    Excludes public and government roles.
-    """
+    """Allow institution-linked users except public/government users."""
     def has_permission(self, request, view):
         return (
             request.user.is_authenticated and
             request.user.institution is not None and
-            request.user.role not in [
+            request.user.primary_role not in [
                 CustomUser.Role.SUPER_ADMIN,
                 CustomUser.Role.PUBLIC_LEARNER,
                 CustomUser.Role.PUBLIC_TEACHER,
@@ -37,13 +36,11 @@ class IsInstitutionStaff(permissions.BasePermission):
 
 
 class IsPublicUser(permissions.BasePermission):
-    """
-    Allows access only to public platform users (not school-linked).
-    """
+    """Allow access only to public users."""
     def has_permission(self, request, view):
         return (
             request.user.is_authenticated and
-            request.user.role in [
+            request.user.primary_role in [
                 CustomUser.Role.PUBLIC_LEARNER,
                 CustomUser.Role.PUBLIC_TEACHER
             ]
@@ -51,36 +48,34 @@ class IsPublicUser(permissions.BasePermission):
 
 
 class IsGovernmentUser(permissions.BasePermission):
-    """
-    Allows access only to government users for national dashboards.
-    """
+    """Allow access only to government users."""
     def has_permission(self, request, view):
         return (
             request.user.is_authenticated and
-            request.user.role == CustomUser.Role.GOV_USER
+            request.user.primary_role == CustomUser.Role.GOV_USER
         )
 
 
 class IsSameInstitutionOrSuperAdmin(permissions.BasePermission):
     """
-    Object-level access: allowed if user is from same institution or is SUPER_ADMIN.
+    Allow if user belongs to the same institution
+    OR user is SUPER_ADMIN
     """
     def has_object_permission(self, request, view, obj):
         user = request.user
-        if user.role == CustomUser.Role.SUPER_ADMIN:
+        if user.primary_role == CustomUser.Role.SUPER_ADMIN:
             return True
-        return hasattr(obj, 'institution') and obj.institution == user.institution
+        return getattr(obj, 'institution', None) == user.institution
 
 
 class IsSameInstitution(permissions.BasePermission):
     """
-    Object-level access: only if user is from the same institution.
-    SUPER_ADMIN is NOT allowed.
+    Only users from the same institution.
+    SUPER_ADMIN is NOT allowed bypass.
     """
     def has_object_permission(self, request, view, obj):
         user = request.user
         return (
             user.is_authenticated and
-            hasattr(obj, 'institution') and
-            obj.institution == user.institution
+            getattr(obj, 'institution', None) == user.institution
         )

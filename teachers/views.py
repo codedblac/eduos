@@ -50,7 +50,7 @@ class TeacherViewSet(viewsets.ModelViewSet):
         timetable_pdf = request.FILES.get('timetable_pdf')
         if timetable_pdf:
             teacher.timetable_pdf = timetable_pdf
-            teacher.save(update_fields=['timetable_pdf'])
+            teacher.save(update_fields = ['timetable_pdf'])
             return Response({'status': 'Timetable uploaded'}, status=200)
         return Response({'error': 'No file uploaded'}, status=400)
 

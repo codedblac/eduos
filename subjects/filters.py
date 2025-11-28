@@ -19,8 +19,7 @@ class SubjectFilter(django_filters.FilterSet):
 
     class Meta:
         model = Subject
-        fields = [
-            'name', 'code', 'curriculum_type', 'category_name',
+        fields = [ 'code', 'curriculum_type', 'category_name',
             'institution_id', 'is_core', 'is_elective',
             'is_active', 'archived'
         ]

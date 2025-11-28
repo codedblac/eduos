@@ -87,10 +87,22 @@ def notify_suspicious_login_task(user_id, ip_address, user_agent=None):
 def log_user_action_task(user_id, action, metadata=None):
     """
     Log user activity (e.g., login, role switch, settings change).
-    Could be extended to write to audit log model or external logging system.
+    Enhanced to support role tracking and institution data.
     """
     try:
         user = CustomUser.objects.get(pk=user_id)
-        logger.info(f"[AUDIT] {user.email} performed '{action}' at {now()} with {metadata or '{}'}")
+
+        # Safely resolve metadata
+        metadata = metadata or {}
+
+        # Extract role info if missing or for redundancy/logging
+        metadata.setdefault("primary_role", user.primary_role.name if user.primary_role else None)
+        metadata.setdefault(
+            "additional_roles",
+            list(user.roles.values_list("name", flat=True)) if hasattr(user, "roles") else []
+        )
+        metadata.setdefault("institution_id", user.institution_id)
+
+        logger.info(f"[AUDIT] {user.email} performed '{action}' at {now()} with {metadata}")
     except CustomUser.DoesNotExist:
         logger.warning(f"Audit log failed: User ID {user_id} not found")

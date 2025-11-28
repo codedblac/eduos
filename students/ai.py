@@ -91,7 +91,7 @@ class StudentAIAnalyzer:
             "Creative Reading Essentials", "National Curriculum Practice Tests"
         ]
         self.student.recommended_books = random.sample(options, 2)
-        self.student.save(update_fields=['recommended_books'])
+        self.student.save(update_fields = ['recommended_books'])
         return self.student.recommended_books
 
     def recommend_mentors(self):
@@ -99,7 +99,7 @@ class StudentAIAnalyzer:
         if teachers.exists():
             top_choices = random.sample(list(teachers.values_list('user__first_name', flat=True)), k=min(2, teachers.count()))
             self.student.recommended_teachers = top_choices
-            self.student.save(update_fields=['recommended_teachers'])
+            self.student.save(update_fields = ['recommended_teachers'])
             return top_choices
         return []
 
@@ -109,14 +109,14 @@ class StudentAIAnalyzer:
         streams = self.student.class_level.streams.annotate(student_count=Count('students')).order_by('student_count')
         if streams.exists():
             self.student.stream = streams.first()
-            self.student.save(update_fields=['stream'])
+            self.student.save(update_fields = ['stream'])
             return self.student.stream
         return None
 
     def generate_summary(self):
         self.student.ai_insights = f"{self.student.first_name} is currently in {self.student.class_level} - {self.student.stream}."
         self.student.performance_comments = self.feedback_comment
-        self.student.save(update_fields=['ai_insights', 'performance_comments'])
+        self.student.save(update_fields = ['ai_insights', 'performance_comments'])
 
     def run_full_analysis(self) -> Dict[str, Any]:
         self.analyze_performance_trends()

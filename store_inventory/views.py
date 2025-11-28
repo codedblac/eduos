@@ -33,25 +33,25 @@ class BaseInstitutionViewSet(viewsets.ModelViewSet):
 class ItemCategoryViewSet(BaseInstitutionViewSet):
     queryset = ItemCategory.objects.all()
     serializer_class = ItemCategorySerializer
-    search_fields = ['name']
+    search_fields = []
 
 
 class ItemUnitViewSet(BaseInstitutionViewSet):
     queryset = ItemUnit.objects.all()
     serializer_class = ItemUnitSerializer
-    search_fields = ['name', 'abbreviation']
+    search_fields = [ 'abbreviation']
 
 
 class ItemViewSet(BaseInstitutionViewSet):
     queryset = Item.objects.all()
     serializer_class = ItemSerializer
-    search_fields = ['name', 'description']
+    search_fields = [ 'description']
 
 
 class SupplierViewSet(BaseInstitutionViewSet):
     queryset = Supplier.objects.all()
     serializer_class = SupplierSerializer
-    search_fields = ['name', 'contact_person']
+    search_fields = [ 'contact_person']
 
 
 class ItemStockEntryViewSet(BaseInstitutionViewSet):

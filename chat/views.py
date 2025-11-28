@@ -28,7 +28,7 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         room = serializer.save(created_by=self.request.user)
-        ChatRoomMembership.objects.create(user=self.request.user, room=room, role='admin')
+        ChatRoomMembership.objects.create(user=self.request.user, room=room, primary_role='admin')
 
     @action(detail=True, methods=['post'])
     def archive(self, request, pk=None):

@@ -29,7 +29,7 @@ class CurriculumViewSet(viewsets.ModelViewSet):
     serializer_class = CurriculumSerializer
     permission_classes = [IsAdminOrReadOnly]
     filter_backends = [filters.SearchFilter, DjangoFilterBackend]
-    search_fields = ['name']
+    search_fields = []
     filterset_fields = ['institution', 'is_active']
 
 

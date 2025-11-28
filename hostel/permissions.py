@@ -14,7 +14,7 @@ class IsHostelManagerOrReadOnly(permissions.BasePermission):
     Custom permission to only allow hostel managers to edit objects.
     """
     def has_permission(self, request, view):
-        return request.method in permissions.SAFE_METHODS or request.user.role in ['admin', 'hostel_manager']
+        return request.method in permissions.SAFE_METHODS or request.user.primary_role in ['admin', 'hostel_manager']
 
     def has_object_permission(self, request, view, obj):
         return self.has_permission(request, view) and obj.institution == request.user.institution

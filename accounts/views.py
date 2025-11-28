@@ -1,25 +1,24 @@
-from rest_framework import generics, status, permissions, views
+from rest_framework import generics, permissions, views
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.authtoken.views import ObtainAuthToken
-from rest_framework.authtoken.models import Token
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
-from django.core.mail import send_mail
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
 from django.shortcuts import get_object_or_404
 from django.conf import settings
-
+from rest_framework.views import APIView
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import OrderingFilter
+from rest_framework.authtoken.views import ObtainAuthToken
 from accounts.models import CustomUser
 from accounts.serializers import (
     UserSerializer,
     UserCreateSerializer,
     UserDetailSerializer,
-    UserMinimalSerializer,
     PublicUserSignupSerializer,
     ChangePasswordSerializer,
-    PasswordResetRequestSerializer,  
+    PasswordResetRequestSerializer,
     PasswordResetConfirmSerializer,
     EmailTokenObtainPairSerializer,
 )
@@ -29,22 +28,41 @@ from accounts.permissions import (
     IsSameInstitutionOrSuperAdmin,
 )
 from accounts.filters import UserFilter
-from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 User = get_user_model()
 
 
+# -------------------------------------------------
+#  Create Institution Admin
+# -------------------------------------------------
+class CreateInstitutionAdminView(generics.CreateAPIView):
+    serializer_class = UserSerializer
+    permission_classes = [IsSuperAdmin]
+
+    def perform_create(self, serializer):
+        serializer.save(
+            primary_role=CustomUser.Role.INSTITUTION_ADMIN,
+            institution=self.request.user.institution
+        )
+
+
+# -------------------------------------------------
 #  Public Registration
-
-
+# -------------------------------------------------
 class RegisterView(generics.CreateAPIView):
     serializer_class = PublicUserSignupSerializer
     permission_classes = [permissions.AllowAny]
 
+    def perform_create(self, serializer):
+        serializer.save(primary_role=CustomUser.Role.PUBLIC_LEARNER)
 
 
-#  Login (Token-based)
+# -------------------------------------------------
+#  Login (JWT)
+# -------------------------------------------------
+class EmailTokenObtainPairView(TokenObtainPairView):
+    serializer_class = EmailTokenObtainPairSerializer
 
 
 class CustomLoginView(ObtainAuthToken):
@@ -58,14 +76,15 @@ class CustomLoginView(ObtainAuthToken):
         })
 
 
-
-#  User Management
-
-
+# -------------------------------------------------
+#  User List & Create
+# -------------------------------------------------
 class UserListCreateView(generics.ListCreateAPIView):
     queryset = CustomUser.objects.select_related("institution").all()
-    filter_backends = [DjangoFilterBackend]
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_class = UserFilter
+    ordering_fields = ["first_name", "last_name", "email", "date_joined"]
+    ordering = ["first_name"]
 
     def get_serializer_class(self):
         return UserCreateSerializer if self.request.method == "POST" else UserSerializer
@@ -77,126 +96,109 @@ class UserListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        if user.role == CustomUser.Role.SUPER_ADMIN:
+        if user.primary_role == CustomUser.Role.SUPER_ADMIN:
             return self.queryset
-        elif user.institution:
+        if user.institution:
             return self.queryset.filter(institution=user.institution)
         return CustomUser.objects.none()
 
     def perform_create(self, serializer):
         user = self.request.user
-        if user.role not in [CustomUser.Role.SUPER_ADMIN, CustomUser.Role.ADMIN]:
+
+        if user.primary_role not in [
+            CustomUser.Role.SUPER_ADMIN,
+            CustomUser.Role.INSTITUTION_ADMIN
+        ]:
             raise PermissionDenied("You do not have permission to create users.")
-        serializer.save(institution=user.institution)
+
+        primary_role = self.request.data.get("primary_role", 'STAFF')
+
+        if primary_role not in CustomUser.Role.values:
+            raise PermissionDenied(f"Invalid role '{primary_role}'.")
+
+        instance = serializer.save(
+            institution=user.institution,
+            primary_role=primary_role,
+        )
+
+        # Optional: Add modules if provided
+        modules = self.request.data.get("modules", [])
+        if modules:
+            from accounts.models import SystemModule
+            module_objects = SystemModule.objects.filter(name__in=modules)
+            instance.modules.set(module_objects)
+            instance.save()
 
 
+# -------------------------------------------------
+#  User Detail
+# -------------------------------------------------
 class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = CustomUser.objects.select_related("institution").all()
     serializer_class = UserDetailSerializer
     permission_classes = [permissions.IsAuthenticated, IsSameInstitutionOrSuperAdmin]
 
-    def get_queryset(self):
-        user = self.request.user
-        if user.role == CustomUser.Role.SUPER_ADMIN:
-            return self.queryset
-        elif user.institution:
-            return self.queryset.filter(institution=user.institution)
-        return CustomUser.objects.none()
 
-
-
+# -------------------------------------------------
 #  Profile (Me)
-
-
+# -------------------------------------------------
 class MeView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        serializer = UserDetailSerializer(request.user)
-        return Response(serializer.data)
-
-    def put(self, request):
-        serializer = UserDetailSerializer(request.user, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
+        return Response(UserDetailSerializer(request.user).data)
 
 
-
-#  Account Switcher
-
-
-class SwitchAccountView(views.APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def post(self, request):
-        target_user_id = request.data.get("target_user_id")
-        if not target_user_id:
-            return Response({"error": "target_user_id is required"}, status=400)
-
-        target_user = get_object_or_404(CustomUser, id=target_user_id)
-        # TODO: Add relationship check
-        return Response(UserMinimalSerializer(target_user).data)
-
-
-
-#  Role Listing
-
-
+# -------------------------------------------------
+#  Role Listing (from TextChoices Enum)
+# -------------------------------------------------
 class UserRolesView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        roles = [{"value": r[0], "label": r[1]} for r in CustomUser.Role.choices]
+        roles = [{"name": r[0], "label": r[1]} for r in CustomUser.Role.choices]
         return Response(roles)
 
 
-
+# -------------------------------------------------
 #  Change Password
-
-
+# -------------------------------------------------
 class ChangePasswordView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
         serializer = ChangePasswordSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
-        user = request.user
-        user.set_password(serializer.validated_data['new_password'])
-        user.save()
+
+        request.user.set_password(serializer.validated_data['new_password'])
+        request.user.save()
+
         return Response({"detail": "Password changed successfully."})
 
 
-
-#  Forgot Password (Reset Request)
-
-
+# -------------------------------------------------
+#  Forgot Password
+# -------------------------------------------------
 class ForgotPasswordView(views.APIView):
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
-        serializer = PasswordResetRequestSerializer(data=request.data)  # ✅ Fixed
+        serializer = PasswordResetRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        email = serializer.validated_data["email"]
-        user = get_object_or_404(User, email=email)
+
+        user = get_object_or_404(User, email=serializer.validated_data["email"])
         token = default_token_generator.make_token(user)
         uid = urlsafe_base64_encode(force_bytes(user.pk))
 
         reset_url = f"{settings.FRONTEND_URL}/reset-password/{uid}/{token}/"
+        user.email_user("Reset your EduOS password", f"Use this link to reset your password:\n{reset_url}")
 
-        send_mail(
-            "Reset your EduOS password",
-            f"Use this link to reset your password:\n\n{reset_url}",
-            settings.DEFAULT_FROM_EMAIL,
-            [user.email],
-        )
         return Response({"detail": "Reset email sent."})
 
 
-
-#  Password Reset Confirm
-
-
+# -------------------------------------------------
+#  Confirm Reset Password
+# -------------------------------------------------
 class PasswordResetConfirmView(views.APIView):
     permission_classes = [permissions.AllowAny]
 
@@ -205,9 +207,8 @@ class PasswordResetConfirmView(views.APIView):
         serializer.is_valid(raise_exception=True)
 
         try:
-            uid = force_str(urlsafe_base64_decode(uidb64))
-            user = User.objects.get(pk=uid)
-        except (User.DoesNotExist, ValueError, TypeError):
+            user = User.objects.get(pk=force_str(urlsafe_base64_decode(uidb64)))
+        except (User.DoesNotExist, ValueError):
             return Response({"error": "Invalid reset link."}, status=400)
 
         if not default_token_generator.check_token(user, token):
@@ -215,8 +216,13 @@ class PasswordResetConfirmView(views.APIView):
 
         user.set_password(serializer.validated_data["new_password"])
         user.save()
+
         return Response({"detail": "Password has been reset successfully."})
 
 
-class EmailTokenObtainPairView(TokenObtainPairView):
-    serializer_class = EmailTokenObtainPairSerializer
+
+class SwitchAccountView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        return Response({"detail": "Switch account feature not implemented yet."}, status=501)

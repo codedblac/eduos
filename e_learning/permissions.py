@@ -24,7 +24,7 @@ class IsStudentOrReadOnly(permissions.BasePermission):
     Allow students to submit/participate, others read-only.
     """
     def has_permission(self, request, view):
-        return request.user.role == 'student' or request.method in permissions.SAFE_METHODS
+        return request.user.primary_role== 'student' or request.method in permissions.SAFE_METHODS
 
 
 class IsEnrolledStudent(permissions.BasePermission):

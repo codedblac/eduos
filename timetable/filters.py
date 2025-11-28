@@ -25,7 +25,7 @@ class RoomFilter(django_filters.FilterSet):
 
     class Meta:
         model = Room
-        fields = ['name', 'is_lab', 'institution']
+        fields = [ 'is_lab', 'institution']
 
 
 class SubjectAssignmentFilter(django_filters.FilterSet):

@@ -6,17 +6,25 @@ import random
 
 class InstitutionAIEngine:
     """
-    AI Engine for institution-level insights, tagging, recommendations, and auto-classification.
+    AI Engine for institution-level insights, tagging, recommendations,
+    auto-classification, and location/funding analytics.
     """
 
     def __init__(self, queryset=None):
+        # Allows filtering by institution admin or superadmin view
         self.queryset = queryset or Institution.objects.all()
 
     def top_counties_by_school_count(self, top_n=10):
         """
         Return top N counties with the highest number of registered institutions.
         """
-        return self.queryset.values('county').annotate(count=Count('id')).order_by('-count')[:top_n]
+        data = (
+            self.queryset
+            .values('county')
+            .annotate(count=Count('id'))
+            .order_by('-count')[:top_n]
+        )
+        return [{"county": item['county'], "count": item['count']} for item in data]
 
     def suggest_school_type(self, name):
         """
@@ -51,16 +59,39 @@ class InstitutionAIEngine:
 
     def common_funding_sources(self, top_n=5):
         """
-        Returns most common funding sources.
+        Returns the most common funding sources.
         """
         sources = self.queryset.exclude(funding_source__isnull=True).values_list('funding_source', flat=True)
-        return Counter(sources).most_common(top_n)
+        return [{"funding_source": src, "count": cnt} for src, cnt in Counter(sources).most_common(top_n)]
 
     def get_location_breakdown(self, country=None):
         """
-        Return breakdown of institutions per county, optionally filtered by country.
+        Returns a nested dict: county -> number of institutions, optionally filtered by country.
         """
         qs = self.queryset
         if country:
             qs = qs.filter(country__iexact=country)
-        return qs.values('county').annotate(count=Count('id')).order_by('-count')
+        data = qs.values('county').annotate(count=Count('id')).order_by('-count')
+        return {item['county']: item['count'] for item in data}
+
+    def ai_dashboard_summary(self, top_counties=5, top_funding_sources=5):
+        """
+        Returns a summary suitable for AI-powered dashboards:
+        - top counties
+        - common funding sources
+        """
+        return {
+            "top_counties": self.top_counties_by_school_count(top_n=top_counties),
+            "common_funding_sources": self.common_funding_sources(top_n=top_funding_sources)
+        }
+
+    def random_recommendations(self, school_name=None):
+        """
+        Returns a quick recommendation set for theming and classification.
+        """
+        school_type = self.suggest_school_type(school_name or "")
+        return {
+            "suggested_school_type": school_type,
+            "theme_color": self.recommend_theme_color(school_type),
+            "suggested_secondary_colors": [self.recommend_theme_color(random.choice(list(Institution.InstitutionType.values))) for _ in range(3)]
+        }

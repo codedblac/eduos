@@ -110,7 +110,7 @@ class SharedAccess(BaseTimestampedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     file = models.ForeignKey(ManagedFile, on_delete=models.CASCADE, related_name='shared_access')
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
-    role = models.CharField(max_length=50, blank=True, null=True)
+    primary_role= models.CharField(max_length=50, blank=True, null=True)
     class_level = models.ForeignKey(ClassLevel, on_delete=models.SET_NULL, null=True, blank=True)
     stream = models.ForeignKey(Stream, on_delete=models.SET_NULL, null=True, blank=True)
     can_download = models.BooleanField(default=True)

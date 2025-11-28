@@ -15,7 +15,7 @@ class IsFinanceAdmin(permissions.BasePermission):
     Full access to all finance operations.
     """
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role in FINANCE_ADMIN_ROLES
+        return request.user.is_authenticated and request.user.primary_role in FINANCE_ADMIN_ROLES
 
 
 class IsAccountant(permissions.BasePermission):
@@ -23,7 +23,7 @@ class IsAccountant(permissions.BasePermission):
     Can perform transactional finance operations (income, expenses, waivers).
     """
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role in ACCOUNTANT_ROLES
+        return request.user.is_authenticated and request.user.primary_role in ACCOUNTANT_ROLES
 
 
 class IsAuditorOrReadOnly(permissions.BasePermission):
@@ -32,7 +32,7 @@ class IsAuditorOrReadOnly(permissions.BasePermission):
     """
     def has_permission(self, request, view):
         return request.user.is_authenticated and (
-            request.user.role in AUDITOR_ROLES or request.method in SAFE_METHODS
+            request.user.primary_role in AUDITOR_ROLES or request.method in SAFE_METHODS
         )
 
 
@@ -41,7 +41,7 @@ class IsRefundApprover(permissions.BasePermission):
     Can approve waivers, refunds, or other financial requests.
     """
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role in FINANCE_ADMIN_ROLES
+        return request.user.is_authenticated and request.user.primary_role in FINANCE_ADMIN_ROLES
 
 
 class IsOwnerOrReadOnly(permissions.BasePermission):
@@ -66,7 +66,7 @@ class IsInstitutionStaff(permissions.BasePermission):
     Read access for institutional leadership and finance staff.
     """
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role in INSTITUTION_STAFF_ROLES
+        return request.user.is_authenticated and request.user.primary_role in INSTITUTION_STAFF_ROLES
 
 
 class IsFinanceRole(permissions.BasePermission):
@@ -74,7 +74,7 @@ class IsFinanceRole(permissions.BasePermission):
     General permission for finance-related operations.
     """
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role in FINANCE_ROLES
+        return request.user.is_authenticated and request.user.primary_role in FINANCE_ROLES
 
 
 class IsFinanceClerkOrReadOnly(permissions.BasePermission):
@@ -83,7 +83,7 @@ class IsFinanceClerkOrReadOnly(permissions.BasePermission):
     """
     def has_permission(self, request, view):
         return request.user.is_authenticated and (
-            request.user.role == 'finance_clerk' or request.method in SAFE_METHODS
+            request.user.primary_role== 'finance_clerk' or request.method in SAFE_METHODS
         )
 
 
@@ -92,7 +92,7 @@ class IsBudgetEditor(permissions.BasePermission):
     Only finance_head or admin can create or edit budgets.
     """
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role in ['finance_head', 'admin']
+        return request.user.is_authenticated and request.user.primary_role in ['finance_head', 'admin']
 
 
 class IsJournalPoster(permissions.BasePermission):
@@ -100,4 +100,4 @@ class IsJournalPoster(permissions.BasePermission):
     Only users with specific rights can post journal entries.
     """
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role in ['admin', 'accountant']
+        return request.user.is_authenticated and request.user.primary_role in ['admin', 'accountant']

@@ -27,7 +27,7 @@ def notify_guardians(student, title, message):
 
 
 def notify_admins(institution, title, message):
-    admins = CustomUser.objects.filter(role='ADMIN', institution=institution, is_active=True)
+    admins = CustomUser.objects.filter(primary_role='ADMIN', institution=institution, is_active=True)
     for admin in admins:
         notification, created = Notification.objects.get_or_create(
             institution=institution,

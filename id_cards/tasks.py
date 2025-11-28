@@ -22,9 +22,9 @@ def generate_id_card(user_id, role):
     """
     try:
         # Get the user object
-        if role == 'student':
+        if primary_role== 'student':
             user = Student.objects.get(id=user_id)
-        elif role == 'teacher':
+        elif primary_role== 'teacher':
             user = Teacher.objects.get(id=user_id)
         else:
             user = CustomUser.objects.get(id=user_id)
@@ -58,7 +58,7 @@ def generate_id_card(user_id, role):
         id_card = IDCard.objects.create(
             user=user.user if hasattr(user, 'user') else user,
             institution=institution,
-            role=role,
+            primary_role=role,
             template=template,
             issued_on=now(),
             expiry_date=valid_until
@@ -93,6 +93,6 @@ def regenerate_id_cards_on_profile_update(user_id):
         existing_card = IDCard.objects.filter(user=user).first()
         if existing_card:
             existing_card.delete()
-        return generate_id_card(user.id, user.role)
+        return generate_id_card(user.id, user.primary_role)
     except Exception as e:
         return f"Error regenerating ID card for user {user_id}: {str(e)}"

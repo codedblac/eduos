@@ -11,7 +11,7 @@ class IsAdminOrAccountant(permissions.BasePermission):
     def has_permission(self, request, view):
         return (
             request.user.is_authenticated and
-            (request.user.role in ['admin', 'accountant'] or request.user.is_superuser)
+            (request.user.primary_role in ['admin', 'accountant'] or request.user.is_superuser)
         )
 
 
@@ -23,7 +23,7 @@ class IsParentOrGuardian(permissions.BasePermission):
     def has_permission(self, request, view):
         return (
             request.user.is_authenticated and
-            request.user.role in ['parent', 'guardian']
+            request.user.primary_role in ['parent', 'guardian']
         )
 
 
@@ -35,7 +35,7 @@ class IsStudent(permissions.BasePermission):
     def has_permission(self, request, view):
         return (
             request.user.is_authenticated and
-            request.user.role == 'student'
+            request.user.primary_role== 'student'
         )
 
 
@@ -48,8 +48,8 @@ class IsOwnerOrAdminOrReadOnly(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             return True
 
-        is_admin = request.user.role == 'admin' or request.user.is_superuser
-        is_accountant = request.user.role == 'accountant'
+        is_admin = request.user.primary_role== 'admin' or request.user.is_superuser
+        is_accountant = request.user.primary_role== 'accountant'
         is_owner = hasattr(obj, 'student') and obj.student.user == request.user
 
         return request.user.is_authenticated and (is_owner or is_admin or is_accountant)

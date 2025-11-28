@@ -13,7 +13,7 @@ def send_daily_hostel_reminders():
             recipient=inspection.inspected_by,
             title="Today's Hostel Inspection",
             message=f"You have a scheduled hostel inspection today in room {inspection.room.name}.",
-            role='staff',
+            primary_role='staff',
             institution=inspection.institution
         )
 
@@ -27,6 +27,6 @@ def alert_about_expiring_allocations():
             recipient=alloc.student.user,
             title="Room Allocation Expiry Notice",
             message=f"Your room allocation for {alloc.room.name} will expire in 3 days.",
-            role='student',
+            primary_role='student',
             institution=alloc.institution
         )

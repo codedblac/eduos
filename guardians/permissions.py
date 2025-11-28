@@ -37,7 +37,7 @@ class IsInstitutionAdminOrStaff(permissions.BasePermission):
         return (
             user.is_authenticated and
             hasattr(user, 'profile') and
-            user.profile.role in ['admin', 'super_admin', 'staff']
+            user.profile.primary_role in ['admin', 'super_admin', 'staff']
         )
 
 
@@ -59,6 +59,6 @@ class CanViewGuardianNotifications(permissions.BasePermission):
 
         # Staff/admin of same institution
         if hasattr(user, 'profile'):
-            return obj.institution == user.profile.institution and user.profile.role in ['admin', 'super_admin', 'staff']
+            return obj.institution == user.profile.institution and user.profile.primary_role in ['admin', 'super_admin', 'staff']
 
         return False

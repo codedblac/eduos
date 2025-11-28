@@ -59,8 +59,8 @@ class TransportRouteViewSet(BaseInstitutionViewSet):
     permission_classes = [permissions.IsAuthenticated, IsTransportAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend, OrderingFilter, SearchFilter]
     filterset_fields = ['institution', 'is_active']
-    search_fields = ['name', 'start_location', 'end_location']
-    ordering_fields = ['name', 'morning_time']
+    search_fields = [ 'start_location', 'end_location']
+    ordering_fields = [ 'morning_time']
 
 
 class TransportAssignmentViewSet(BaseInstitutionViewSet):

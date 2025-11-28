@@ -214,7 +214,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CORS_ALLOW_ALL_ORIGINS = True  # Allow all origins for development
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",  # Or your Flutter web port
-    "https://yourdomain.com",
+    "http://localhost:9002",
+    "https://eduos-front.vercel.app",
 ]
 
 

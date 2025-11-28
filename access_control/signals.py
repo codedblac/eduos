@@ -29,11 +29,11 @@ def handle_role_assignment_create_or_update(sender, instance, created, **kwargs)
             actor_id=actor_id,
             user_id=instance.user.id,
             institution_id=instance.institution.id,
-            role_id=instance.role.id,
+            role_id=instance.primary_role.id,
             action=action,
             notes="Automatic role assignment log"
         )
-    sync_permissions_for_role.delay(instance.role.id)
+    sync_permissions_for_role.delay(instance.primary_role.id)
 
 
 @receiver(pre_delete, sender=UserRoleAssignment)
@@ -47,7 +47,7 @@ def handle_role_assignment_deletion(sender, instance, **kwargs):
             actor_id=actor_id,
             user_id=instance.user.id,
             institution_id=instance.institution.id,
-            role_id=instance.role.id,
+            role_id=instance.primary_role.id,
             action="remove",
             notes="Role removed"
         )
@@ -64,11 +64,11 @@ def handle_role_permission_update(sender, instance, created, **kwargs):
         log_permission_change.delay(
             actor_id=actor.id,
             permission_id=instance.permission.id,
-            role_id=instance.role.id,
+            role_id=instance.primary_role.id,
             action=action,
             notes="Permission assigned via API"
         )
-    sync_permissions_for_role.delay(instance.role.id)
+    sync_permissions_for_role.delay(instance.primary_role.id)
 
 
 # @receiver(post_save, sender=ApprovalRequest)
@@ -81,7 +81,7 @@ def handle_role_permission_update(sender, instance, created, **kwargs):
 #             actor=instance.approved_by,
 #             target_user=instance.requested_by,
 #             institution=instance.institution,
-#             role=None,
+#             primary_role=None,
 #             action="update",
 #             notes=f"{instance.status.title()} approval request: {instance.request_type} (Ref ID: {instance.reference_id})"
 #         )

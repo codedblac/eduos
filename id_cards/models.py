@@ -58,7 +58,7 @@ class IDCard(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     institution = models.ForeignKey(Institution, on_delete=models.CASCADE, related_name="id_cards")
-    role = models.CharField(max_length=20, choices=ROLE_CHOICES)
+    primary_role= models.CharField(max_length=20, choices=ROLE_CHOICES)
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="id_cards")
     template = models.ForeignKey(IDCardTemplate, on_delete=models.SET_NULL, null=True, related_name="id_cards")
 
@@ -89,7 +89,7 @@ class IDCard(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.full_name} ({self.role}) - {self.unique_id}"
+        return f"{self.full_name} ({self.primary_role}) - {self.unique_id}"
 
 
 class IDCardAuditLog(models.Model):

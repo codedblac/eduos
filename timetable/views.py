@@ -39,7 +39,7 @@ class RoomViewSet(viewsets.ModelViewSet):
     permission_classes = [IsInstitutionAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_class = RoomFilter
-    search_fields = ['name', 'institution__name']
+    search_fields = [ 'institution__name']
 
 
 class SubjectAssignmentViewSet(viewsets.ModelViewSet):

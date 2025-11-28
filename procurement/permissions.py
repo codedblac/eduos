@@ -27,32 +27,32 @@ class IsInstitutionMember(permissions.BasePermission):
 
 class IsProcurementOfficer(permissions.BasePermission):
     def has_permission(self, request, view):
-        return request.user.role in ['procurement_officer', 'admin', 'super_admin']
+        return request.user.primary_role in ['procurement_officer', 'admin', 'super_admin']
 
 
 class IsDepartmentHead(permissions.BasePermission):
     def has_permission(self, request, view):
-        return request.user.role in ['department_head', 'admin', 'super_admin']
+        return request.user.primary_role in ['department_head', 'admin', 'super_admin']
 
 
 class IsFinanceManager(permissions.BasePermission):
     def has_permission(self, request, view):
-        return request.user.role in ['finance_manager', 'admin', 'super_admin']
+        return request.user.primary_role in ['finance_manager', 'admin', 'super_admin']
 
 
 class IsStoreClerk(permissions.BasePermission):
     def has_permission(self, request, view):
-        return request.user.role in ['store_clerk', 'admin', 'super_admin']
+        return request.user.primary_role in ['store_clerk', 'admin', 'super_admin']
 
 
 class IsSuperAdmin(permissions.BasePermission):
     def has_permission(self, request, view):
-        return request.user.role == 'super_admin'
+        return request.user.primary_role== 'super_admin'
 
 
 class IsAdminOrSuperAdmin(permissions.BasePermission):
     def has_permission(self, request, view):
-        return request.user.role in ['admin', 'super_admin']
+        return request.user.primary_role in ['admin', 'super_admin']
 
 
 # ----------------------------
@@ -67,7 +67,7 @@ class IsRequestOwnerOrAdmin(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         return (
             request.user == obj.requested_by or
-            request.user.role in ['admin', 'super_admin'] or
+            request.user.primary_role in ['admin', 'super_admin'] or
             request.user.is_superuser
         )
 
@@ -80,7 +80,7 @@ class IsInvoiceUnpaidAndFinanceManager(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         return (
             not obj.is_paid and
-            request.user.role in ['finance_manager', 'admin', 'super_admin']
+            request.user.primary_role in ['finance_manager', 'admin', 'super_admin']
         )
 
 
@@ -91,6 +91,6 @@ class IsApproverForRequest(permissions.BasePermission):
     """
 
     def has_permission(self, request, view):
-        return request.user.role in [
+        return request.user.primary_role in [
             'finance_manager', 'admin', 'super_admin', 'department_head'
         ]

@@ -11,7 +11,7 @@ class IsAttendanceAdmin(permissions.BasePermission):
     """
     def has_permission(self, request, view):
         return request.user.is_authenticated and (
-            request.user.role in ['ADMIN', 'ATTENDANCE_ADMIN', 'HR'] or request.user.is_superuser
+            request.user.primary_role in ['ADMIN', 'ATTENDANCE_ADMIN', 'HR'] or request.user.is_superuser
         )
 
 
@@ -20,7 +20,7 @@ class IsTeacherOrStaff(permissions.BasePermission):
     Allow teachers or staff to view and manage their own attendance data.
     """
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role in ['TEACHER', 'STAFF', 'SUPPORT_STAFF']
+        return request.user.is_authenticated and request.user.primary_role in ['TEACHER', 'STAFF', 'SUPPORT_STAFF']
 
 
 class IsSelfOrReadOnly(permissions.BasePermission):
@@ -30,7 +30,7 @@ class IsSelfOrReadOnly(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         if request.method in SAFE_METHODS:
             return obj.user == request.user or request.user.is_superuser
-        return request.user.role in ['ADMIN', 'ATTENDANCE_ADMIN'] or request.user.is_superuser
+        return request.user.primary_role in ['ADMIN', 'ATTENDANCE_ADMIN'] or request.user.is_superuser
 
 
 class IsRecordedBySelfOrAdmin(permissions.BasePermission):
@@ -40,7 +40,7 @@ class IsRecordedBySelfOrAdmin(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         if request.method in SAFE_METHODS:
             return True
-        return obj.recorded_by == request.user or request.user.role in ['ADMIN', 'ATTENDANCE_ADMIN']
+        return obj.recorded_by == request.user or request.user.primary_role in ['ADMIN', 'ATTENDANCE_ADMIN']
 
 
 class IsInstitutionMatch(permissions.BasePermission):
@@ -56,6 +56,6 @@ class CanViewSummaries(permissions.BasePermission):
     Allow summary viewing by admins, HR, and attendance officers.
     """
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role in [
+        return request.user.is_authenticated and request.user.primary_role in [
             'ADMIN', 'HR', 'ATTENDANCE_ADMIN', 'AUDITOR'
         ]

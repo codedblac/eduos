@@ -8,7 +8,7 @@ class IsInstitutionStaffOrAdmin(permissions.BasePermission):
     """
 
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role in ['admin', 'staff', 'super_admin'] and request.user.institution is not None
+        return request.user.is_authenticated and request.user.primary_role in ['admin', 'staff', 'super_admin'] and request.user.institution is not None
 
     def has_object_permission(self, request, view, obj):
         return obj.institution == request.user.institution
@@ -65,7 +65,7 @@ class IsEventRegistrantOrAdmin(permissions.BasePermission):
         return request.user.is_authenticated
 
     def has_object_permission(self, request, view, obj):
-        if request.user.role in ['admin', 'staff', 'super_admin']:
+        if request.user.primary_role in ['admin', 'staff', 'super_admin']:
             return obj.event.institution == request.user.institution
         if hasattr(request.user, 'student') and hasattr(request.user.student, 'alumni_profile'):
             return obj.alumni == request.user.student.alumni_profile

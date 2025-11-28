@@ -4,7 +4,7 @@ import subprocess
 
 # --- SETTINGS ---
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-EXCLUDED_APPS = {'env', 'venv', 'config', 'static', 'media', 'templates', 'node_modules', '.git', '__pycache__'}
+EXCLUDED_APPS = {'env', 'venv', '.venv', 'config', 'static', 'media', 'templates', 'node_modules', '.git', '__pycache__'}
 
 def is_django_app(app_path):
     return os.path.isdir(app_path) and (

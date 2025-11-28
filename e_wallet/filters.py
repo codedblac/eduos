@@ -24,7 +24,7 @@ class WalletTransactionFilter(django_filters.FilterSet):
 
 class MicroFeeFilter(django_filters.FilterSet):
     title = django_filters.CharFilter(field_name='title', lookup_expr='icontains')
-    teacher = django_filters.ModelChoiceFilter(queryset=CustomUser.objects.filter(role='teacher'))
+    teacher = django_filters.ModelChoiceFilter(queryset=CustomUser.objects.filter(primary_role='teacher'))
     class_level = django_filters.CharFilter(field_name='class_level__name', lookup_expr='icontains')
     stream = django_filters.CharFilter(field_name='stream__name', lookup_expr='icontains')
     due_date = django_filters.DateFilter(field_name='due_date')

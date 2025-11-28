@@ -16,13 +16,13 @@ from guardians.models import GuardianStudentLink
 class ClassLevelMiniSerializer(serializers.ModelSerializer):
     class Meta:
         model = ClassLevel
-        fields = ['id', 'name', 'order']
+        fields = ['id', 'order']
 
 
 class StreamMiniSerializer(serializers.ModelSerializer):
     class Meta:
         model = Stream
-        fields = ['id', 'name', 'code']
+        fields = ['id', 'code']
 
 
 class TeacherMiniSerializer(serializers.ModelSerializer):
@@ -129,5 +129,4 @@ class StudentCreateUpdateSerializer(serializers.ModelSerializer):
             'date_of_birth', 'gender', 'photo', 'stream', 'class_level',
             'enrollment_status', 'date_joined', 'date_left',
             'assigned_class_teacher', 'religion', 'disability', 'health_notes',
-            'wallet_balance', 'is_boarding', 'parent_access_code',
-        ]
+            'wallet_balance', 'is_boarding', 'parent_access_code']

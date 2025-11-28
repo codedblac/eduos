@@ -6,7 +6,7 @@ class IsSuperAdmin(permissions.BasePermission):
     """Allows access only to Super Admins."""
 
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role == CustomUser.Role.SUPER_ADMIN
+        return request.user.is_authenticated and request.user.primary_role== CustomUser.Role.SUPER_ADMIN
 
 
 class IsInstitutionAdmin(permissions.BasePermission):
@@ -14,7 +14,7 @@ class IsInstitutionAdmin(permissions.BasePermission):
 
     def has_permission(self, request, view):
         user = request.user
-        return user.is_authenticated and user.role == CustomUser.Role.ADMIN and user.institution is not None
+        return user.is_authenticated and user.primary_role== CustomUser.Role.ADMIN and user.institution is not None
 
 
 class IsSameInstitutionOrSuperAdmin(permissions.BasePermission):
@@ -27,18 +27,20 @@ class IsSameInstitutionOrSuperAdmin(permissions.BasePermission):
         user = request.user
         if not user.is_authenticated:
             return False
-        if user.role == CustomUser.Role.SUPER_ADMIN:
+        if user.primary_role== CustomUser.Role.SUPER_ADMIN:
             return True
-        return hasattr(obj, 'institution') and obj.institution == user.institution
+        return getattr(obj, 'institution', None) == user.institution
 
 
 class IsSuperAdminOrReadOnly(permissions.BasePermission):
-    """Super Admins can read/write. Others only have read access."""
+    """
+    Super Admins can read/write. Others only have read access.
+    """
 
     def has_permission(self, request, view):
         if request.method in permissions.SAFE_METHODS:
             return True
-        return request.user.is_authenticated and request.user.role == CustomUser.Role.SUPER_ADMIN
+        return request.user.is_authenticated and request.user.primary_role== CustomUser.Role.SUPER_ADMIN
 
 
 class IsInstitutionAdminOrReadOnly(permissions.BasePermission):
@@ -53,16 +55,16 @@ class IsInstitutionAdminOrReadOnly(permissions.BasePermission):
         user = request.user
         return (
             user.is_authenticated and
-            user.role in [CustomUser.Role.ADMIN, CustomUser.Role.SUPER_ADMIN]
+            user.primary_role in [CustomUser.Role.ADMIN, CustomUser.Role.SUPER_ADMIN]
         )
 
     def has_object_permission(self, request, view, obj):
         if request.method in permissions.SAFE_METHODS:
             return True
         user = request.user
-        if user.role == CustomUser.Role.SUPER_ADMIN:
+        if user.primary_role== CustomUser.Role.SUPER_ADMIN:
             return True
-        return hasattr(obj, 'institution') and obj.institution == user.institution
+        return getattr(obj, 'institution', None) == user.institution
 
 
 class CanManageInstitutionData(permissions.BasePermission):
@@ -75,15 +77,15 @@ class CanManageInstitutionData(permissions.BasePermission):
         user = request.user
         if not user.is_authenticated:
             return False
-        if user.role == CustomUser.Role.SUPER_ADMIN:
+        if user.primary_role== CustomUser.Role.SUPER_ADMIN:
             return True
-        return request.method in permissions.SAFE_METHODS and user.role == CustomUser.Role.ADMIN
+        return request.method in permissions.SAFE_METHODS and user.primary_role== CustomUser.Role.ADMIN
 
     def has_object_permission(self, request, view, obj):
         user = request.user
-        if user.role == CustomUser.Role.SUPER_ADMIN:
+        if user.primary_role== CustomUser.Role.SUPER_ADMIN:
             return True
-        return hasattr(obj, 'institution') and obj.institution == user.institution
+        return getattr(obj, 'institution', None) == user.institution
 
 
 class IsInstitutionMember(permissions.BasePermission):
@@ -92,4 +94,5 @@ class IsInstitutionMember(permissions.BasePermission):
     """
 
     def has_permission(self, request, view):
-        return request.user and request.user.is_authenticated and hasattr(request.user, 'institution') and request.user.institution is not None
+        user = request.user
+        return user.is_authenticated and getattr(user, 'institution', None) is not None

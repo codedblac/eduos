@@ -11,7 +11,7 @@ class IsHOD(permissions.BasePermission):
 
     def has_permission(self, request, view):
         return DepartmentUser.objects.filter(
-            user=request.user, role='HOD', is_active=True
+            user=request.user, primary_role='HOD', is_active=True
         ).exists()
 
 
@@ -22,7 +22,7 @@ class IsDeputyHOD(permissions.BasePermission):
 
     def has_permission(self, request, view):
         return DepartmentUser.objects.filter(
-            user=request.user, role='DEPUTY_HOD', is_active=True
+            user=request.user, primary_role='DEPUTY_HOD', is_active=True
         ).exists()
 
 
@@ -47,7 +47,7 @@ class IsHODAndOwnDepartment(permissions.BasePermission):
         return DepartmentUser.objects.filter(
             user=request.user,
             department=obj,
-            role='HOD',
+            primary_role='HOD',
             is_active=True
         ).exists()
 

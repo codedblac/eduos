@@ -46,9 +46,9 @@ class WalletViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        if user.role == 'student':
+        if user.primary_role== 'student':
             return Wallet.objects.filter(student__user=user)
-        if user.role == 'parent':
+        if user.primary_role== 'parent':
             return Wallet.objects.filter(student__guardians=user)
         return super().get_queryset()
 
@@ -63,9 +63,9 @@ class WalletTransactionViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        if user.role == 'student':
+        if user.primary_role== 'student':
             return WalletTransaction.objects.filter(wallet__student__user=user)
-        if user.role == 'parent':
+        if user.primary_role== 'parent':
             return WalletTransaction.objects.filter(wallet__student__guardians=user)
         return super().get_queryset()
 
@@ -97,9 +97,9 @@ class MicroFeePaymentViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        if user.role == 'student':
+        if user.primary_role== 'student':
             return MicroFeePayment.objects.filter(student__user=user)
-        if user.role == 'parent':
+        if user.primary_role== 'parent':
             return MicroFeePayment.objects.filter(student__guardians=user)
         return super().get_queryset()
 

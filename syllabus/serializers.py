@@ -13,7 +13,7 @@ User = get_user_model()
 class InstitutionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Institution
-        fields = ['id', 'name']
+        fields = ['id']
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -38,19 +38,19 @@ class CurriculumSerializer(serializers.ModelSerializer):
 class SubjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subject
-        fields = ['id', 'name', 'code']
+        fields = ['id', 'code']
 
 
 class ClassLevelSerializer(serializers.ModelSerializer):
     class Meta:
         model = ClassLevel
-        fields = ['id', 'name', 'code']
+        fields = ['id', 'code']
 
 
 class TermSerializer(serializers.ModelSerializer):
     class Meta:
         model = Term
-        fields = ['id', 'name', 'order']
+        fields = ['id', 'order']
 
 
 class CurriculumSubjectSerializer(serializers.ModelSerializer):

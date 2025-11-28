@@ -25,7 +25,7 @@ class IsInstitutionUploaderOrReadOnly(permissions.BasePermission):
 
         return (
             obj.uploader == user
-            or user.profile.role in ['admin', 'super_admin']
+            or user.profile.primary_role in ['admin', 'super_admin']
             or (hasattr(user, 'institution') and user.institution == obj.institution)
         )
 
@@ -41,7 +41,7 @@ class IsSchoolTeacherOrAdmin(permissions.BasePermission):
         return (
             user.is_authenticated
             and hasattr(user, 'profile')
-            and user.profile.role in ['teacher', 'admin', 'super_admin']
+            and user.profile.primary_role in ['teacher', 'admin', 'super_admin']
         )
 
 
@@ -73,7 +73,7 @@ class IsStudentOfInstitution(permissions.BasePermission):
         return (
             user.is_authenticated
             and hasattr(user, 'profile')
-            and user.profile.role == 'student'
+            and user.profile.primary_role== 'student'
             and obj.institution == user.profile.institution
         )
 
@@ -89,7 +89,7 @@ class IsInstitutionAdminOrUploader(permissions.BasePermission):
             return False
         return (
             obj.uploader == user
-            or user.profile.role in ['admin', 'super_admin']
+            or user.profile.primary_role in ['admin', 'super_admin']
             or (hasattr(user, 'institution') and user.institution == obj.institution)
         )
 
@@ -106,5 +106,5 @@ class IsModeratorOrUploader(permissions.BasePermission):
             return False
         return (
             obj.uploader == user
-            or user.profile.role in ['admin', 'super_admin', 'moderator']
+            or user.profile.primary_role in ['admin', 'super_admin', 'moderator']
         )

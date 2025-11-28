@@ -154,13 +154,13 @@ class LessonFeedback(models.Model):
     """
     lesson_session = models.ForeignKey(LessonSession, on_delete=models.CASCADE, related_name='feedbacks')
     submitted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
-    role = models.CharField(max_length=20, choices=[('student', 'Student'), ('peer', 'Peer'), ('supervisor', 'Supervisor')])
+    primary_role= models.CharField(max_length=20, choices=[('student', 'Student'), ('peer', 'Peer'), ('supervisor', 'Supervisor')])
     rating = models.PositiveIntegerField(null=True, blank=True)
     comment = models.TextField()
     submitted_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Feedback ({self.role}) - {self.lesson_session}"
+        return f"Feedback ({self.primary_role}) - {self.lesson_session}"
 
 
 class LessonTemplate(models.Model):

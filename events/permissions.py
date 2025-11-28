@@ -43,7 +43,7 @@ class CanManageEvent(permissions.BasePermission):
 
     def has_object_permission(self, request, view, obj):
         user = request.user
-        return obj.created_by == user or user.role == CustomUser.Role.ADMIN
+        return obj.created_by == user or user.primary_role== CustomUser.Role.ADMIN
 
 
 class IsInstitutionAdmin(permissions.BasePermission):
@@ -53,4 +53,4 @@ class IsInstitutionAdmin(permissions.BasePermission):
 
     def has_permission(self, request, view):
         user = request.user
-        return user.is_authenticated and user.role == CustomUser.Role.ADMIN
+        return user.is_authenticated and user.primary_role== CustomUser.Role.ADMIN

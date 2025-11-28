@@ -42,7 +42,7 @@ class SubjectViewSet(viewsets.ModelViewSet):
     permission_classes = [IsInstitutionAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_class = SubjectFilter
-    search_fields = ['name', 'code', 'description']
+    search_fields = [ 'code', 'description']
 
 
 class SubjectClassLevelViewSet(viewsets.ModelViewSet):
@@ -67,7 +67,7 @@ class SubjectCategoryViewSet(viewsets.ModelViewSet):
     serializer_class = SubjectCategorySerializer
     permission_classes = [IsInstitutionAdminOrReadOnly]
     filter_backends = [filters.SearchFilter]
-    search_fields = ['name']
+    search_fields = []
 
 
 class SubjectPrerequisiteViewSet(viewsets.ModelViewSet):

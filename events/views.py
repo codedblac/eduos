@@ -37,7 +37,7 @@ class EventViewSet(viewsets.ModelViewSet):
         institution = user.institution
         qs = Event.objects.filter(institution=institution)
 
-        if user.role == 'student' and hasattr(user, 'student'):
+        if user.primary_role== 'student' and hasattr(user, 'student'):
             student = user.student
             qs = qs.filter(
                 Q(target_roles__contains=['student']) |
@@ -45,9 +45,9 @@ class EventViewSet(viewsets.ModelViewSet):
                 Q(target_class_levels=student.class_level) |
                 Q(target_streams=student.stream)
             )
-        elif user.role == 'guardian':
+        elif user.primary_role== 'guardian':
             qs = qs.filter(Q(target_roles__contains=['guardian']))
-        elif user.role == 'teacher':
+        elif user.primary_role== 'teacher':
             qs = qs.filter(Q(target_roles__contains=['teacher']))
         # Admins and staff see all
         return qs.distinct()
