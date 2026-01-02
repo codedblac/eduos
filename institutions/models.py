@@ -1,6 +1,7 @@
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
+from django.conf import settings
 import uuid
 
 
@@ -21,6 +22,15 @@ class SchoolType(models.TextChoices):
     PRIVATE = 'private', _('Private')
     COMMUNITY = 'community', _('Community')
     OTHER = 'other', _('Other')
+
+
+# =========================
+# Institution Status
+# =========================
+class InstitutionStatus(models.TextChoices):
+    ACTIVE = "Active", _("Active")
+    SUSPENDED = "Suspended", _("Suspended")
+    PENDING = "Pending", _("Pending")
 
 
 # =========================
@@ -45,17 +55,50 @@ class Institution(models.Model):
     email = models.EmailField(blank=True, null=True)
     website = models.URLField(blank=True, null=True)
 
-    # Branding / theming
+    # Branding
     logo = models.ImageField(upload_to='institution_logos/', blank=True, null=True)
     primary_color = models.CharField(max_length=20, default="#0047AB")
     secondary_color = models.CharField(max_length=20, default="#FFFFFF")
-    theme_mode = models.CharField(max_length=10, choices=[('light', _('Light')), ('dark', _('Dark'))], default='light')
+    theme_mode = models.CharField(
+        max_length=10,
+        choices=[('light', _('Light')), ('dark', _('Dark'))],
+        default='light'
+    )
 
     # Classification
     school_type = models.CharField(max_length=20, choices=SchoolType.choices, default=SchoolType.OTHER)
     institution_type = models.CharField(max_length=20, choices=InstitutionType.choices, default=InstitutionType.OTHER)
     ownership = models.CharField(max_length=255, blank=True, null=True)
     funding_source = models.CharField(max_length=255, blank=True, null=True)
+    
+        # =========================
+    # SaaS Status Control
+    # =========================
+    status = models.CharField(
+        max_length=20,
+        choices=InstitutionStatus.choices,
+        default=InstitutionStatus.PENDING,
+        db_index=True,
+    )
+
+    
+    # Subscription Plan - lazy string reference to avoid circular imports
+    plan = models.ForeignKey(
+        "modules.Plan",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="institutions"
+    )
+
+    # Main Institution Admin User
+    admin_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="managed_institutions"
+    )
 
     # Metadata
     established_year = models.PositiveIntegerField(blank=True, null=True)
@@ -65,12 +108,12 @@ class Institution(models.Model):
 
     class Meta:
         indexes = [
-            models.Index(fields = ['country']),
-            models.Index(fields = ['county']),
-            models.Index(fields = ['sub_county']),
-            models.Index(fields = ['ward']),
-            models.Index(fields = ['village']),
-            models.Index(fields = ['code']),
+            models.Index(fields=['country']),
+            models.Index(fields=['county']),
+            models.Index(fields=['sub_county']),
+            models.Index(fields=['ward']),
+            models.Index(fields=['village']),
+            models.Index(fields=['code']),
         ]
         ordering = ['name']
         verbose_name = _("Institution")
@@ -79,6 +122,27 @@ class Institution(models.Model):
     def __str__(self):
         return self.name
 
+    # =========================
+    # Dynamic Module Logic
+    # =========================
+    def apply_plan_modules(self):
+        """Assign modules from the selected plan."""
+        if not self.plan:
+            return
+        from modules.models import SchoolModule  # lazy import
+        SchoolModule.assign_plan_modules(self, self.plan)
+
+    def add_custom_module(self, module_id):
+        """Add a custom module to the institution."""
+        from modules.models import SystemModule, SchoolModule  # lazy import
+        module = SystemModule.objects.get(id=module_id)
+        SchoolModule.assign_custom_module(self, module)
+
+    def get_available_modules(self):
+        """Return modules available to the institution for UI/sidebar."""
+        from modules.models import SchoolModule  # lazy import
+        return SchoolModule.get_institution_modules(self)
+
 
 # =========================
 # School Account Model
@@ -86,6 +150,7 @@ class Institution(models.Model):
 class SchoolAccount(models.Model):
     BANK = 'bank'
     MOBILE_MONEY = 'mobile_money'
+
     PAYMENT_TYPES = [
         (BANK, _('Bank Account')),
         (MOBILE_MONEY, _('Mobile Money')),
@@ -117,24 +182,26 @@ class SchoolAccount(models.Model):
 # Pending School Registration
 # =========================
 class SchoolRegistrationRequest(models.Model):
-    """
-    Captures school registration submissions before verification.
-    """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     school_name = models.CharField(max_length=255)
     code = models.CharField(max_length=50, unique=True)
+
     country = models.CharField(max_length=100)
     county = models.CharField(max_length=100)
     sub_county = models.CharField(max_length=100, blank=True, null=True)
     ward = models.CharField(max_length=100, blank=True, null=True)
     village = models.CharField(max_length=100, blank=True, null=True)
+
     email = models.EmailField()
     phone = models.CharField(max_length=20, blank=True, null=True)
+
     institution_type = models.CharField(max_length=50, choices=InstitutionType.choices, default=InstitutionType.OTHER)
     school_type = models.CharField(max_length=50, choices=SchoolType.choices, default=SchoolType.OTHER)
+
     submitted_at = models.DateTimeField(auto_now_add=True)
     approved = models.BooleanField(default=False)
     approved_at = models.DateTimeField(blank=True, null=True)
+
     admin_created = models.BooleanField(default=False)
 
     class Meta:

@@ -1,25 +1,42 @@
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from .models import CustomUser, Institution, SystemModule
+from .models import CustomUser, Institution, SystemModule, ModulePermission
 
 
+
+
+class UserModuleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SystemModule
+        fields = ("id", "app_label", "name")
 # ---------------------------
 # Institution Serializer
 # ---------------------------
 class InstitutionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Institution
-        fields = ['id', 'is_active', 'created_at']
+        fields = ['id', 'name', 'is_active', 'created_at']
 
 
 # ---------------------------
-# SystemModule Serializer (Replaces RoleAssignment)
+# Module Permission Serializer
+# ---------------------------
+class ModulePermissionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ModulePermission
+        fields = ['id', 'name', 'codename']
+
+
+# ---------------------------
+# SystemModule Serializer (with Permissions)
 # ---------------------------
 class SystemModuleSerializer(serializers.ModelSerializer):
+    permissions = ModulePermissionSerializer(many=True, read_only=True)
+
     class Meta:
         model = SystemModule
-        fields = ["id", "description", "is_default"]
+        fields = ["id", "name", "app_label", "description", "is_default", "permissions"]
 
 
 # ---------------------------
@@ -29,41 +46,50 @@ class UserSerializer(serializers.ModelSerializer):
     institution = InstitutionSerializer(read_only=True)
     full_name = serializers.SerializerMethodField()
     modules = SystemModuleSerializer(many=True, read_only=True)
+    all_permissions = serializers.SerializerMethodField()
 
     class Meta:
         model = CustomUser
         fields = [
             "id", "email", "first_name", "last_name", "full_name",
             "phone", "primary_role", "modules", "institution",
+            "all_permissions",
             "is_active", "is_staff", "date_joined", "last_updated",
-            "profile_picture"]
+            "profile_picture"
+        ]
 
     def get_full_name(self, obj):
         return f"{obj.first_name} {obj.last_name}"
+
+    def get_all_permissions(self, obj):
+        return obj.all_permissions
 
 
 # ---------------------------
 # User Detail Serializer
 # ---------------------------
 class UserDetailSerializer(serializers.ModelSerializer):
-    institution_name = serializers.CharField(source="institution.name", read_only=True)
-    full_name = serializers.SerializerMethodField()
-    modules = SystemModuleSerializer(many=True, read_only=True)
+    modules = UserModuleSerializer(many=True, read_only=True)
+    institution_name = serializers.CharField(
+        source="institution.name",
+        read_only=True
+    )
 
     class Meta:
         model = CustomUser
-        fields = [
-            "id", "email", "first_name", "last_name", "full_name",
-            "phone", "primary_role", "modules",
-            "institution", "institution_name",
-            "is_active", "is_staff",
-            "date_joined", "last_updated",
-            "last_login", "last_login_ip", "last_user_agent",
-            "profile_picture"]
-        read_only_fields = ["id", "email", "institution", "date_joined", "last_login"]
+        fields = (
+            "id",
+            "email",
+            "first_name",
+            "last_name",
+            "primary_role",
+            "institution",
+            "institution_name",
+            "modules",
+            "is_active",
+            "is_staff",
+        )
 
-    def get_full_name(self, obj):
-        return f"{obj.first_name} {obj.last_name}"
 
 
 # ---------------------------
@@ -82,7 +108,8 @@ class UserCreateSerializer(serializers.ModelSerializer):
         fields = [
             "email", "first_name", "last_name", "phone",
             "primary_role", "modules",
-            "institution", "password", "profile_picture"]
+            "institution", "password", "profile_picture"
+        ]
 
     def validate(self, data):
         primary_role = data.get("primary_role")
@@ -90,9 +117,9 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
         institutional_roles = [
             CustomUser.Role.INSTITUTION_ADMIN,
-            'TEACHER',
-            'STUDENT',
-            'STAFF',
+            CustomUser.Role.TEACHER,
+            CustomUser.Role.STUDENT,
+            CustomUser.Role.STAFF,
         ]
 
         if primary_role in institutional_roles and institution is None:
@@ -119,8 +146,30 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
         if modules:
             user.modules.set(modules)
+            # Auto-assign permissions linked to the selected modules
+            perms = ModulePermission.objects.filter(module__in=modules)
+            user.module_permissions.set(perms)
 
         return user
+
+    def update(self, instance, validated_data):
+        modules = validated_data.pop("modules", None)
+        password = validated_data.pop("password", None)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        if password:
+            instance.set_password(password)
+
+        instance.save()
+
+        if modules is not None:
+            instance.modules.set(modules)
+            perms = ModulePermission.objects.filter(module__in=modules)
+            instance.module_permissions.set(perms)
+
+        return instance
 
 
 # ---------------------------

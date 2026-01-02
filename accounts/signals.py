@@ -15,19 +15,16 @@ def handle_user_creation(sender, instance, created, **kwargs):
     Trigger background actions after user creation/update.
     """
     try:
-        # primary_role is a string now, no need to access .name
+        # Primary role is a string now
         primary_role_name = instance.primary_role
 
-        # Optional additional roles, if you ever implement a separate roles M2M
-        additional_roles = (
-            list(instance.roles.values_list("name", flat=True))
-            if hasattr(instance, "roles") else []
-        )
+        # Get assigned modules names
+        assigned_modules = list(instance.modules.values_list("name", flat=True))
 
         metadata = {
             "institution_id": instance.institution_id,
             "primary_role": primary_role_name,
-            "additional_roles": additional_roles,
+            "assigned_modules": assigned_modules,
         }
 
         if created:
@@ -45,13 +42,10 @@ def handle_user_creation(sender, instance, created, **kwargs):
             log_user_action_task.delay(
                 user_id=instance.id,
                 action="account_updated",
-                metadata={
-                    "institution_id": instance.institution_id,
-                    "primary_role": primary_role_name
-                }
+                metadata=metadata
             )
 
     except Exception as e:
-        # Prevent user creation from failing if signal tasks fail
+        # Prevent signal failure from blocking user save
         from django.core.exceptions import ImproperlyConfigured
         raise ImproperlyConfigured(f"Error processing post_save signal for CustomUser: {e}")

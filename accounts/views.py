@@ -1,4 +1,4 @@
-from rest_framework import generics, permissions, views
+from rest_framework import generics, permissions, views, status
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
 from django.contrib.auth import get_user_model
@@ -10,8 +10,9 @@ from django.conf import settings
 from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter
-from rest_framework.authtoken.views import ObtainAuthToken
-from accounts.models import CustomUser
+from rest_framework_simplejwt.views import TokenObtainPairView
+
+from accounts.models import CustomUser, SystemModule, ModulePermission
 from accounts.serializers import (
     UserSerializer,
     UserCreateSerializer,
@@ -21,6 +22,7 @@ from accounts.serializers import (
     PasswordResetRequestSerializer,
     PasswordResetConfirmSerializer,
     EmailTokenObtainPairSerializer,
+    SystemModuleSerializer,
 )
 from accounts.permissions import (
     IsSuperAdmin,
@@ -28,57 +30,77 @@ from accounts.permissions import (
     IsSameInstitutionOrSuperAdmin,
 )
 from accounts.filters import UserFilter
-from rest_framework_simplejwt.views import TokenObtainPairView
 
 User = get_user_model()
 
+# ---------------------------
+# Module Views
+# ---------------------------
+class ModuleListView(generics.ListAPIView):
+    queryset = SystemModule.objects.prefetch_related("permissions").all()
+    serializer_class = SystemModuleSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
-# -------------------------------------------------
-#  Create Institution Admin
-# -------------------------------------------------
+
+class ModuleDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = SystemModule.objects.prefetch_related("permissions").all()
+    serializer_class = SystemModuleSerializer
+    permission_classes = [IsSuperAdmin]
+
+
+# ---------------------------
+# Create Institution Admin
+# ---------------------------
 class CreateInstitutionAdminView(generics.CreateAPIView):
-    serializer_class = UserSerializer
+    serializer_class = UserCreateSerializer
     permission_classes = [IsSuperAdmin]
 
     def perform_create(self, serializer):
-        serializer.save(
+        user = serializer.save(
             primary_role=CustomUser.Role.INSTITUTION_ADMIN,
             institution=self.request.user.institution
         )
+        # Assign default modules and group permissions
+        default_modules = SystemModule.objects.filter(is_default=True)
+        user.modules.set(default_modules)
+        for module in default_modules:
+            if module.default_group:
+                user.groups.add(module.default_group)
+        perms = ModulePermission.objects.filter(module__in=default_modules)
+        user.module_permissions.set(perms)
+        user.save()
 
 
-# -------------------------------------------------
-#  Public Registration
-# -------------------------------------------------
+# ---------------------------
+# Public Registration
+# ---------------------------
 class RegisterView(generics.CreateAPIView):
     serializer_class = PublicUserSignupSerializer
     permission_classes = [permissions.AllowAny]
 
     def perform_create(self, serializer):
-        serializer.save(primary_role=CustomUser.Role.PUBLIC_LEARNER)
+        user = serializer.save(primary_role=CustomUser.Role.PUBLIC_LEARNER)
+        # Assign default public modules if any
+        default_modules = SystemModule.objects.filter(is_default=True)
+        user.modules.set(default_modules)
+        for module in default_modules:
+            if module.default_group:
+                user.groups.add(module.default_group)
+        perms = ModulePermission.objects.filter(module__in=default_modules)
+        user.module_permissions.set(perms)
+        user.save()
 
 
-# -------------------------------------------------
-#  Login (JWT)
-# -------------------------------------------------
+# ---------------------------
+# Login (JWT)
+# ---------------------------
 class EmailTokenObtainPairView(TokenObtainPairView):
     serializer_class = EmailTokenObtainPairSerializer
 
 
-class CustomLoginView(ObtainAuthToken):
-    def post(self, request, *args, **kwargs):
-        response = super().post(request, *args, **kwargs)
-        token = Token.objects.get(key=response.data['token'])
-        user = token.user
-        return Response({
-            "token": token.key,
-            "user": UserSerializer(user).data
-        })
-
-
-# -------------------------------------------------
-#  User List & Create
-# -------------------------------------------------
+# ---------------------------
+# User List & Create
+# ---------------------------
 class UserListCreateView(generics.ListCreateAPIView):
     queryset = CustomUser.objects.select_related("institution").all()
     filter_backends = [DjangoFilterBackend, OrderingFilter]
@@ -121,27 +143,50 @@ class UserListCreateView(generics.ListCreateAPIView):
             primary_role=primary_role,
         )
 
-        # Optional: Add modules if provided
+        # Assign modules and automatically handle group permissions
         modules = self.request.data.get("modules", [])
         if modules:
-            from accounts.models import SystemModule
-            module_objects = SystemModule.objects.filter(name__in=modules)
+            module_objects = SystemModule.objects.filter(id__in=modules)
             instance.modules.set(module_objects)
-            instance.save()
+
+            for module in module_objects:
+                if module.default_group:
+                    instance.groups.add(module.default_group)
+
+            all_perms = ModulePermission.objects.filter(module__in=module_objects)
+            instance.module_permissions.set(all_perms)
+
+        instance.save()
 
 
-# -------------------------------------------------
-#  User Detail
-# -------------------------------------------------
+# ---------------------------
+# User Detail
+# ---------------------------
 class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = CustomUser.objects.select_related("institution").all()
     serializer_class = UserDetailSerializer
     permission_classes = [permissions.IsAuthenticated, IsSameInstitutionOrSuperAdmin]
 
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        modules = self.request.data.get("modules", None)
+        if modules is not None:
+            module_objects = SystemModule.objects.filter(id__in=modules)
+            instance.modules.set(module_objects)
 
-# -------------------------------------------------
-#  Profile (Me)
-# -------------------------------------------------
+            for module in module_objects:
+                if module.default_group:
+                    instance.groups.add(module.default_group)
+
+            all_perms = ModulePermission.objects.filter(module__in=module_objects)
+            instance.module_permissions.set(all_perms)
+
+        instance.save()
+
+
+# ---------------------------
+# Profile (Me)
+# ---------------------------
 class MeView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -149,9 +194,9 @@ class MeView(views.APIView):
         return Response(UserDetailSerializer(request.user).data)
 
 
-# -------------------------------------------------
-#  Role Listing (from TextChoices Enum)
-# -------------------------------------------------
+# ---------------------------
+# Role Listing
+# ---------------------------
 class UserRolesView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -160,14 +205,14 @@ class UserRolesView(views.APIView):
         return Response(roles)
 
 
-# -------------------------------------------------
-#  Change Password
-# -------------------------------------------------
+# ---------------------------
+# Change Password
+# ---------------------------
 class ChangePasswordView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        serializer = ChangePasswordSerializer(data=request.data, context={'request': request})
+        serializer = ChangePasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         request.user.set_password(serializer.validated_data['new_password'])
@@ -176,9 +221,9 @@ class ChangePasswordView(views.APIView):
         return Response({"detail": "Password changed successfully."})
 
 
-# -------------------------------------------------
-#  Forgot Password
-# -------------------------------------------------
+# ---------------------------
+# Forgot Password
+# ---------------------------
 class ForgotPasswordView(views.APIView):
     permission_classes = [permissions.AllowAny]
 
@@ -191,14 +236,17 @@ class ForgotPasswordView(views.APIView):
         uid = urlsafe_base64_encode(force_bytes(user.pk))
 
         reset_url = f"{settings.FRONTEND_URL}/reset-password/{uid}/{token}/"
-        user.email_user("Reset your EduOS password", f"Use this link to reset your password:\n{reset_url}")
+        user.email_user(
+            "Reset your EduOS password",
+            f"Use this link to reset your password:\n{reset_url}"
+        )
 
         return Response({"detail": "Reset email sent."})
 
 
-# -------------------------------------------------
-#  Confirm Reset Password
-# -------------------------------------------------
+# ---------------------------
+# Confirm Reset Password
+# ---------------------------
 class PasswordResetConfirmView(views.APIView):
     permission_classes = [permissions.AllowAny]
 
@@ -220,7 +268,9 @@ class PasswordResetConfirmView(views.APIView):
         return Response({"detail": "Password has been reset successfully."})
 
 
-
+# ---------------------------
+# Switch Account (Placeholder)
+# ---------------------------
 class SwitchAccountView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 

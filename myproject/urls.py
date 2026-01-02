@@ -52,6 +52,8 @@ urlpatterns = [
     path('api/v1/e-wallet/', include('e_wallet.urls')),
     path('api/v1/access-control/', include('access_control.urls')),
     path('', include('landing.urls')),
+    path("api/v1/modules/", include("modules.urls")),
+
 ]
 
 if settings.DEBUG:

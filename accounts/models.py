@@ -2,25 +2,9 @@ from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
 from django.utils import timezone
 from institutions.models import Institution
+from modules.models import SystemModule, ModulePermission, SchoolModule
+from django.contrib.auth.models import Permission
 
-
-
-
-# ---------------------
-# Module Model (Dynamic Access Control)
-# ---------------------
-class SystemModule(models.Model):
-    """
-    Represents dashboards/modules within the institution system.
-    Example: Finance, Library, Hostel, Academics...
-    Allows admin to create custom modules dynamically.
-    """
-    name = models.CharField(max_length=100, unique=True)
-    description = models.TextField(blank=True, null=True)
-    is_default = models.BooleanField(default=True)  # Default system modules
-
-    def __str__(self):
-        return self.name
 
 
 # ---------------------
@@ -31,18 +15,12 @@ class CustomUserManager(BaseUserManager):
         if not email:
             raise ValueError("Email is required.")
         email = self.normalize_email(email)
-        # Ensure primary_role is a string if passed as Role enum
-        if 'primary_role' in extra_fields and isinstance(extra_fields['primary_role'], models.TextChoices):
-            extra_fields['primary_role'] = extra_fields['primary_role'].value
         user = self.model(email=email, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
         return user
 
     def create_superuser(self, email, password=None, **extra_fields):
-        """
-        Force superuser to always be SUPER_ADMIN
-        """
         extra_fields['primary_role'] = CustomUser.Role.SUPER_ADMIN
         extra_fields['is_superuser'] = True
         extra_fields['is_staff'] = True
@@ -59,7 +37,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         INSTITUTION_ADMIN = "INSTITUTION_ADMIN", "Institution Admin"
         TEACHER = "TEACHER", "Teacher"
         STUDENT = "STUDENT", "Student"
-        STAFF = "STAFF", "General Staff"  # Staff with multiple modules
+        STAFF = "STAFF", "General Staff"
         PUBLIC_LEARNER = "PUBLIC_LEARNER", "Public Learner"
         PUBLIC_TEACHER = "PUBLIC_TEACHER", "Public Teacher"
         GOV_USER = "GOV_USER", "Government User"
@@ -68,23 +46,9 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     first_name = models.CharField(max_length=150)
     last_name = models.CharField(max_length=150)
     phone = models.CharField(max_length=20, blank=True, null=True)
+    primary_role = models.CharField(max_length=30, choices=Role.choices, default=Role.STAFF)
 
-    # PRIMARY ROLE (Main dashboard category)
-    primary_role = models.CharField(
-        max_length=30,
-        choices=Role.choices,
-        default=Role.STAFF  # Default to STAFF if not provided
-    )
-
-    # MODULE ACCESS (Multiple modules)
-    modules = models.ManyToManyField(SystemModule, blank=True, related_name="users")
-
-    institution = models.ForeignKey(
-        Institution,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True
-    )
+    institution = models.ForeignKey(Institution, on_delete=models.SET_NULL, null=True, blank=True)
 
     profile_picture = models.ImageField(upload_to='user_avatars/', null=True, blank=True)
     reset_token = models.CharField(max_length=64, null=True, blank=True)
@@ -98,6 +62,12 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     last_login_ip = models.GenericIPAddressField(null=True, blank=True)
     last_user_agent = models.TextField(null=True, blank=True)
 
+    # ---------------------
+    # Modules & Permissions
+    # ---------------------
+    modules = models.ManyToManyField(SystemModule, blank=True, related_name="users")
+    module_permissions = models.ManyToManyField(ModulePermission, blank=True, related_name="users")
+
     objects = CustomUserManager()
 
     USERNAME_FIELD = 'email'
@@ -106,9 +76,9 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return f"{self.email} ({self.primary_role})"
 
-    # -----------------
-    # Helper properties
-    # -----------------
+    # ---------------------
+    # Role Properties
+    # ---------------------
     @property
     def is_super_admin(self):
         return self.primary_role == self.Role.SUPER_ADMIN
@@ -117,10 +87,42 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     def is_institution_admin(self):
         return self.primary_role == self.Role.INSTITUTION_ADMIN
 
-    @property
-    def is_public(self):
-        return self.primary_role in {self.Role.PUBLIC_LEARNER, self.Role.PUBLIC_TEACHER}
-
+    # ---------------------
+    # Module Access Properties
+    # ---------------------
     @property
     def available_modules(self):
+        """
+        Returns list of module names available to the user.
+        Super Admin gets all modules automatically.
+        """
+        if self.is_super_admin:
+            return list(SystemModule.objects.values_list('name', flat=True))
         return [module.name for module in self.modules.all()]
+
+    @property
+    def all_permissions(self):
+        """
+        Returns all permission codenames the user has:
+        - Via module linked groups
+        - Via custom ModulePermission
+        - Super Admin gets all permissions automatically
+        """
+        perms = set()
+
+        if self.is_super_admin:
+            perms.update(
+                Permission.objects.all().values_list('codename', flat=True)
+            )
+            return list(perms)
+
+        for module in self.modules.all():
+            # Permissions via module's linked group
+            if module.linked_group:
+                perms.update(module.linked_group.permissions.values_list('codename', flat=True))
+            # Extra module-specific permissions
+            perms.update(module.custom_permissions.values_list('codename', flat=True))
+
+        # Direct user-assigned module permissions
+        perms.update(self.module_permissions.values_list('codename', flat=True))
+        return list(perms)
