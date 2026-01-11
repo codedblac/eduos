@@ -1,116 +1,277 @@
-from .models import ClassLevel, Stream
-from students.models import Student
-from django.db.models import Count
+# classes/ai.py
+
 from typing import Optional, List, Dict
 import random
 
+from django.db.models import Count, Q, F
 
-def recommend_least_populated_stream(class_level: ClassLevel) -> Optional[Stream]:
-    """
-    Recommends the stream within the given class level that has the fewest students.
-    """
-    streams = class_level.streams.annotate(student_count=Count('students')).order_by('student_count')
-    return streams.first() if streams.exists() else None
+from .models import (
+    ClassLevel,
+    Stream,
+    StudentStreamEnrollment,
+    StreamAnalytics,
+)
+from students.models import Student
+from academics.models import AcademicYear
 
 
-def auto_assign_stream(student: Student) -> Optional[Stream]:
+# ======================================================
+# 🔹 STREAM RECOMMENDATIONS
+# ======================================================
+
+def recommend_least_populated_stream(
+    class_level: ClassLevel,
+    academic_year: AcademicYear,
+) -> Optional[Stream]:
     """
-    Automatically assigns a student to the least populated stream in their class level.
-    Returns the assigned stream or None.
+    Recommends the least populated ACTIVE stream within a class level
+    for a given academic year.
     """
-    if not student.class_level:
+    streams = (
+        Stream.objects
+        .filter(
+            class_level=class_level,
+            academic_year=academic_year,
+            is_active=True,
+        )
+        .annotate(
+            student_count=Count(
+                'enrollments',
+                filter=Q(enrollments__status='active')
+            )
+        )
+        .order_by('student_count', 'order')
+    )
+
+    return streams.first()
+
+
+def auto_assign_stream(
+    student: Student,
+    class_level: ClassLevel,
+    academic_year: AcademicYear,
+    assigned_by=None,
+) -> Optional[StudentStreamEnrollment]:
+    """
+    Automatically assigns a student to the least populated stream.
+    Creates a StudentStreamEnrollment record.
+    """
+
+    recommended_stream = recommend_least_populated_stream(
+        class_level=class_level,
+        academic_year=academic_year,
+    )
+
+    if not recommended_stream:
         return None
 
-    recommended_stream = recommend_least_populated_stream(student.class_level)
-    if recommended_stream:
-        student.stream = recommended_stream
-        student.save(update_fields = ['stream'])
-        return recommended_stream
-    return None
+    enrollment, created = StudentStreamEnrollment.objects.get_or_create(
+        student=student,
+        academic_year=academic_year,
+        defaults={
+            'stream': recommended_stream,
+            'status': 'active',
+            'assigned_by': assigned_by,
+        }
+    )
+
+    return enrollment
 
 
-def recommend_class_for_transfer(student: Student) -> Optional[ClassLevel]:
+# ======================================================
+# 🔹 CLASS LEVEL TRANSFER RECOMMENDATIONS
+# ======================================================
+
+def recommend_class_for_transfer(
+    student: Student,
+    current_class_level: ClassLevel,
+) -> Optional[ClassLevel]:
     """
-    Recommends a new class level for a student's transfer based on performance or age.
-    (Stub logic, can be enhanced by integrating performance scores or AI model.)
+    Recommends a new class level for transfer or promotion.
+    Placeholder logic – should later use analytics snapshots.
     """
-    # Placeholder logic simulating performance-based recommendation
-    performance_score = random.uniform(0, 1)  # Replace with real evaluation later
-    if performance_score > 0.8 and student.class_level:
-        next_level = (
-            ClassLevel.objects.filter(
-                institution=student.institution,
-                order__gt=student.class_level.order
-            ).order_by('order').first()
+
+    # Placeholder for ML / AI score
+    performance_score = random.uniform(0, 1)
+
+    if performance_score < 0.8:
+        return None
+
+    return (
+        ClassLevel.objects
+        .filter(
+            institution=current_class_level.institution,
+            order__gt=current_class_level.order
         )
-        return next_level
-    return None
+        .order_by('order')
+        .first()
+    )
 
 
-def generate_class_distribution_report(institution) -> List[Dict]:
+# ======================================================
+# 🔹 CLASS / STREAM DISTRIBUTION REPORT
+# ======================================================
+
+def generate_class_distribution_report(
+    institution_id: int,
+    academic_year: AcademicYear,
+) -> List[Dict]:
     """
-    Generates a structured report of student distribution across all class levels and streams.
-    Useful for visualizations, dashboards, and audits.
+    Generates student distribution across class levels and streams.
+    Uses enrollment data (single source of truth).
     """
+
     report = []
-    class_levels = ClassLevel.objects.filter(institution=institution).order_by('order')
+
+    class_levels = (
+        ClassLevel.objects
+        .filter(institution_id=institution_id)
+        .order_by('order')
+    )
 
     for level in class_levels:
-        streams = level.streams.annotate(student_count=Count('students')).order_by('order')
+        streams = (
+            Stream.objects
+            .filter(
+                class_level=level,
+                academic_year=academic_year,
+                is_active=True,
+            )
+            .annotate(
+                student_count=Count(
+                    'enrollments',
+                    filter=Q(enrollments__status='active')
+                )
+            )
+            .order_by('order')
+        )
+
         stream_data = [
             {
                 'stream': stream.name,
                 'stream_code': stream.code,
-                'students': stream.student_count
+                'students': stream.student_count,
+                'capacity': stream.capacity,
             }
             for stream in streams
         ]
 
-        level_summary = {
+        report.append({
             'class_level': level.name,
             'class_level_code': level.code,
             'streams': stream_data,
-            'total_students': sum(s['students'] for s in stream_data)
-        }
-        report.append(level_summary)
+            'total_students': sum(s['students'] for s in stream_data),
+        })
 
     return report
 
 
-def highlight_overcrowded_streams(threshold: int = 45) -> List[Stream]:
+# ======================================================
+# 🔹 OVERCROWDING DETECTION
+# ======================================================
+
+def highlight_overcrowded_streams(
+    institution_id: int,
+    academic_year: AcademicYear,
+) -> List[Stream]:
     """
-    Returns a queryset of streams with student count above a defined overcrowding threshold.
-    Default threshold: 45 students per stream.
+    Returns streams where ACTIVE students exceed capacity.
     """
-    return Stream.objects.annotate(student_count=Count('students')).filter(student_count__gt=threshold)
+
+    return (
+        Stream.objects
+        .filter(
+            academic_year=academic_year,
+            class_level__institution_id=institution_id,
+            is_active=True,
+        )
+        .annotate(
+            student_count=Count(
+                'enrollments',
+                filter=Q(enrollments__status='active')
+            )
+        )
+        .filter(student_count__gt=F('capacity'))
+        .order_by('-student_count')
+    )
 
 
-def suggest_balanced_allocation(institution) -> List[Dict]:
+# ======================================================
+# 🔹 BALANCED ALLOCATION SUGGESTIONS
+# ======================================================
+
+def suggest_balanced_allocation(
+    institution_id: int,
+    academic_year: AcademicYear,
+    imbalance_threshold: int = 10,
+) -> List[Dict]:
     """
-    Suggests a redistribution plan for overloaded and underloaded streams within each class level.
-    Can be used by admin to manually move students and reduce crowding.
+    Suggests redistribution plans within each class level
+    to reduce overcrowding.
     """
+
     suggestions = []
-    class_levels = ClassLevel.objects.filter(institution=institution)
+
+    class_levels = ClassLevel.objects.filter(
+        institution_id=institution_id
+    )
 
     for level in class_levels:
-        streams = level.streams.annotate(student_count=Count('students')).order_by('student_count')
+        streams = (
+            Stream.objects
+            .filter(
+                class_level=level,
+                academic_year=academic_year,
+                is_active=True,
+            )
+            .annotate(
+                student_count=Count(
+                    'enrollments',
+                    filter=Q(enrollments__status='active')
+                )
+            )
+            .order_by('student_count')
+        )
 
         if streams.count() < 2:
-            continue  # Need at least 2 streams to balance
+            continue
 
-        most = streams.last()
         least = streams.first()
+        most = streams.last()
+
         imbalance = most.student_count - least.student_count
 
-        if imbalance >= 10:
+        if imbalance >= imbalance_threshold:
             suggestions.append({
                 'class_level': level.name,
                 'from_stream': most.name,
                 'to_stream': least.name,
                 'students_to_move': imbalance // 2,
                 'from_count': most.student_count,
-                'to_count': least.student_count
+                'to_count': least.student_count,
             })
 
     return suggestions
+
+
+# ======================================================
+# 🔹 AI INSIGHTS FROM ANALYTICS SNAPSHOTS
+# ======================================================
+
+def evaluate_stream_risk(
+    stream_analytics: StreamAnalytics,
+) -> str:
+    """
+    Simple AI evaluation using analytics snapshots.
+    """
+
+    if stream_analytics.average_score < 40:
+        return 'High academic risk'
+
+    if stream_analytics.attendance_rate < 75:
+        return 'Attendance risk'
+
+    if stream_analytics.discipline_index > 3:
+        return 'Discipline risk'
+
+    return 'Normal'

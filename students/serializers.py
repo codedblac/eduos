@@ -130,3 +130,8 @@ class StudentCreateUpdateSerializer(serializers.ModelSerializer):
             'enrollment_status', 'date_joined', 'date_left',
             'assigned_class_teacher', 'religion', 'disability', 'health_notes',
             'wallet_balance', 'is_boarding', 'parent_access_code']
+
+class StudentMinimalSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Student
+        fields = ['id', 'first_name', 'last_name', 'admission_number', 'class_level', 'stream']

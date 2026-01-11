@@ -22,6 +22,7 @@ EXCLUDED_APPS = [
     # "accounts",
     # "institutions",
     # "modules",
+    "landing",
 ]
 
 def is_valid_module(app_label: str) -> bool:

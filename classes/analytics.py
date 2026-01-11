@@ -1,114 +1,204 @@
-from django.db.models import Count, F
-from typing import Dict, List, Any
-from .models import ClassLevel, Stream
-from students.models import Student
-from teachers.models import Teacher
-from institutions.models import Institution
+# classes/analytics.py
 
+from django.db.models import Count, Q
+from academics.models import AcademicYear
+from .models import ClassLevel, Stream, StudentStreamEnrollment
 
-def get_class_level_distribution(institution_id: int) -> List[Dict[str, Any]]:
-    """
-    Returns number of students per class level for a given institution.
-    """
-    return (
-        Student.objects.filter(institution_id=institution_id)
-        .values(class_level=F("class_level__name"))
-        .annotate(count=Count("id"))
-        .order_by("class_level")
+# ======================================================
+# Helper to get current academic year if not provided
+# ======================================================
+def get_academic_year_id(institution_id, academic_year_id=None):
+    if academic_year_id is not None:
+        return academic_year_id
+    academic_year = (
+        AcademicYear.objects
+        .filter(institution_id=institution_id, is_current=True)
+        .first()
     )
+    if not academic_year:
+        raise ValueError("No active academic year found for this institution")
+    return academic_year.id
 
 
-def get_stream_distribution(institution_id: int) -> List[Dict[str, Any]]:
-    """
-    Returns number of students per stream within each class level.
-    """
-    return (
-        Student.objects.filter(institution_id=institution_id)
-        .values(
-            class_level=F("class_level__name"),
-            stream=F("stream__name")
+# ======================================================
+# CLASS LEVEL DISTRIBUTION
+# ======================================================
+def get_class_level_distribution(institution_id, academic_year_id=None):
+    academic_year_id = get_academic_year_id(institution_id, academic_year_id)
+    
+    class_levels = (
+        ClassLevel.objects.filter(institution_id=institution_id)
+        .annotate(
+            total_students=Count(
+                'streams__enrollments',
+                filter=Q(
+                    streams__enrollments__status='active',
+                    streams__academic_year_id=academic_year_id
+                )
+            )
         )
-        .annotate(count=Count("id"))
-        .order_by("class_level", "stream")
+        .order_by('order', 'name')
     )
 
+    return [
+        {
+            "id": cl.id,
+            "name": cl.name,
+            "total_students": cl.total_students
+        }
+        for cl in class_levels
+    ]
 
-def get_gender_breakdown_per_class(institution_id: int) -> List[Dict[str, Any]]:
-    """
-    Returns gender distribution grouped by class level.
-    """
-    return (
-        Student.objects.filter(institution_id=institution_id)
-        .values(
-            class_level=F("class_level__name"),
-            gender=F("gender")
+
+# ======================================================
+# STREAM DISTRIBUTION
+# ======================================================
+def get_stream_distribution(institution_id, academic_year_id=None):
+    academic_year_id = get_academic_year_id(institution_id, academic_year_id)
+    
+    streams = Stream.objects.filter(
+        class_level__institution_id=institution_id,
+        academic_year_id=academic_year_id
+    ).annotate(
+        total_students=Count('enrollments', filter=Q(enrollments__status='active'))
+    )
+
+    return [
+        {
+            "id": s.id,
+            "name": s.name,
+            "class_level_id": s.class_level_id,
+            "total_students": s.total_students
+        }
+        for s in streams
+    ]
+
+
+# ======================================================
+# GENDER BREAKDOWN PER CLASS
+# ======================================================
+def get_gender_breakdown_per_class(institution_id, academic_year_id=None):
+    academic_year_id = get_academic_year_id(institution_id, academic_year_id)
+    
+    class_levels = ClassLevel.objects.filter(institution_id=institution_id)
+    result = []
+    for cl in class_levels:
+        male_count = StudentStreamEnrollment.objects.filter(
+            stream__class_level=cl,
+            stream__academic_year_id=academic_year_id,
+            status='active',
+            student__gender='male'
+        ).count()
+        female_count = StudentStreamEnrollment.objects.filter(
+            stream__class_level=cl,
+            stream__academic_year_id=academic_year_id,
+            status='active',
+            student__gender='female'
+        ).count()
+        result.append({
+            "class_level_id": cl.id,
+            "male": male_count,
+            "female": female_count
+        })
+    return result
+
+
+# ======================================================
+# OVERCROWDED STREAMS
+# ======================================================
+def get_overcrowded_streams(institution_id, academic_year_id=None, threshold=40):
+    academic_year_id = get_academic_year_id(institution_id, academic_year_id)
+    
+    streams = Stream.objects.filter(
+        class_level__institution_id=institution_id,
+        academic_year_id=academic_year_id
+    ).annotate(
+        total_students=Count('enrollments', filter=Q(enrollments__status='active'))
+    )
+    return [
+        {
+            "id": s.id,
+            "name": s.name,
+            "total_students": s.total_students
+        }
+        for s in streams if s.total_students > threshold
+    ]
+
+
+# ======================================================
+# EMPTY CLASSES AND STREAMS
+# ======================================================
+def get_empty_classes_and_streams(institution_id, academic_year_id=None):
+    academic_year_id = get_academic_year_id(institution_id, academic_year_id)
+    
+    empty_classes = ClassLevel.objects.filter(
+        institution_id=institution_id,
+        streams__academic_year_id=academic_year_id
+    ).annotate(
+        total_students=Count(
+            'streams__enrollments',
+            filter=Q(
+                streams__enrollments__status='active',
+                streams__academic_year_id=academic_year_id
+            )
         )
-        .annotate(count=Count("id"))
-        .order_by("class_level", "gender")
-    )
+    ).filter(total_students=0)
 
-
-def get_overcrowded_streams(institution_id: int, threshold: int = 45) -> List[Dict[str, Any]]:
-    """
-    Detect streams exceeding the specified student threshold.
-    """
-    return (
-        Stream.objects.filter(class_level__institution_id=institution_id)
-        .annotate(student_count=Count("students"))
-        .filter(student_count__gt=threshold)
-        .values(
-            "id", "name", "code", 
-            "class_level__name", 
-            "student_count", "capacity"
-        )
-        .order_by("-student_count")
-    )
-
-
-def get_empty_classes_and_streams(institution_id: int) -> Dict[str, List[Dict[str, Any]]]:
-    """
-    Returns lists of empty class levels and empty streams (zero students).
-    """
-    empty_classes = ClassLevel.objects.filter(institution_id=institution_id)\
-        .annotate(student_count=Count("students"))\
-        .filter(student_count=0)\
-        .values("id", "name", "code")
-
-    empty_streams = Stream.objects.filter(class_level__institution_id=institution_id)\
-        .annotate(student_count=Count("students"))\
-        .filter(student_count=0)\
-        .values("id", "name", "code", "class_level__name")
+    empty_streams = Stream.objects.filter(
+        class_level__institution_id=institution_id,
+        academic_year_id=academic_year_id
+    ).annotate(
+        total_students=Count('enrollments', filter=Q(enrollments__status='active'))
+    ).filter(total_students=0)
 
     return {
-        "empty_class_levels": list(empty_classes),
-        "empty_streams": list(empty_streams)
+        "empty_classes": [{"id": cl.id, "name": cl.name} for cl in empty_classes],
+        "empty_streams": [{"id": s.id, "name": s.name} for s in empty_streams],
     }
 
 
-def get_total_summary(institution_id: int) -> Dict[str, int]:
-    """
-    Returns a summary of key totals for dashboard metrics.
-    """
-    total_students = Student.objects.filter(institution_id=institution_id).count()
+# ======================================================
+# ENROLLMENT STATUS STATS
+# ======================================================
+def get_enrollment_status_stats(institution_id, academic_year_id=None):
+    academic_year_id = get_academic_year_id(institution_id, academic_year_id)
+    
+    streams = Stream.objects.filter(
+        class_level__institution_id=institution_id,
+        academic_year_id=academic_year_id
+    )
+    total_enrolled = StudentStreamEnrollment.objects.filter(
+        stream__in=streams, status='active'
+    ).count()
+    total_pending = StudentStreamEnrollment.objects.filter(
+        stream__in=streams, status='pending'
+    ).count()
+
+    return {
+        "active": total_enrolled,
+        "pending": total_pending
+    }
+
+
+# ======================================================
+# TOTAL SUMMARY
+# ======================================================
+def get_total_summary(institution_id, academic_year_id=None):
+    academic_year_id = get_academic_year_id(institution_id, academic_year_id)
+    
     total_classes = ClassLevel.objects.filter(institution_id=institution_id).count()
-    total_streams = Stream.objects.filter(institution_id=institution_id).count()
-    total_teachers = Teacher.objects.filter(institution_id=institution_id).count()
+    total_streams = Stream.objects.filter(
+        class_level__institution_id=institution_id,
+        academic_year_id=academic_year_id
+    ).count()
+    total_students = StudentStreamEnrollment.objects.filter(
+        stream__class_level__institution_id=institution_id,
+        stream__academic_year_id=academic_year_id,
+        status='active'
+    ).count()
 
     return {
-        "total_students": total_students,
-        "total_classes": total_classes,
-        "total_streams": total_streams,
-        "total_teachers": total_teachers,
+        "classes": total_classes,
+        "streams": total_streams,
+        "students": total_students
     }
-
-
-def get_enrollment_status_stats(institution_id: int) -> List[Dict[str, Any]]:
-    """
-    Returns student counts grouped by enrollment status.
-    """
-    return (
-        Student.objects.filter(institution_id=institution_id)
-        .values("enrollment_status")
-        .annotate(count=Count("id"))
-        .order_by("-count")
-    )
